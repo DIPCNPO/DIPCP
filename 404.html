@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark" class="dark-theme">
+
+<head>
+	<meta charset="UTF-8">
+	<!-- 动态设置 base 标签以支持子目录部署 -->
+	<link rel="icon" href="./favicon.ico" type="image/x-icon">
+	<link rel="shortcut icon" href="./favicon.ico" type="image/x-icon">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>DIPCP - Decentralized Intellectual Property Collaboration Platform</title>
+	<script>
+		// 立即执行：在浏览器解析后续资源之前设置base标签
+		var path = window.location.pathname;
+		var basePath = '/';
+		if (path.startsWith('/DIPCP')) {
+			basePath = '/DIPCP/';
+		} else if (path.includes('index.html')) {
+			basePath = path.replace(/\/index\.html.*$/, '');
+			if (basePath && !basePath.endsWith('/')) {
+				basePath += '/';
+			}
+		}
+		document.write('<base href="' + basePath + '">');
+	</script>
+	<link rel="stylesheet" href="styles/main.css">
+	<link rel="stylesheet" href="styles/codemirror.css">
+	<link rel="stylesheet" href="styles/modal.css">
+	<script>
+		// 重定向到index.html以支持SPA路由
+		// 保持当前路径，让前端路由处理
+		var path = window.location.pathname;
+		var search = window.location.search;
+		var hash = window.location.hash;
+		var newPath = './index.html' + search + hash;
+
+		// 如果路径不是index.html，则重定向
+		if (!path.endsWith('/index.html') && path !== '/index.html') {
+			// 对于SPA，我们需要加载index.html，然后让前端路由处理
+			// 直接使用当前逻辑加载应用
+		}
+	</script>
+</head>
+
+<body>
+	<!-- 应用容器 -->
+	<div id="app">
+		<!-- 应用内容将通过JavaScript动态渲染 -->
+		<div class="loading-screen">
+			<div class="loading-spinner">⏳</div>
+			<p>Welcome to DIPCP</p>
+		</div>
+	</div>
+
+	<!-- 只加载i18n服务和动态加载器 -->
+	<!-- 使用相对路径，base 标签会处理子目录部署 -->
+	<script src="js/services/i18n-service.js"></script>
+	<script src="js/loader.js"></script>
+</body>
+
+</html>

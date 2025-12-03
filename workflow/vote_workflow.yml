@@ -1,0 +1,524 @@
+name: Vote Workflow
+
+on:
+  schedule:
+    # 每分钟触发一次（测试用，正式环境应改为每小时：'0 * * * *'）
+    # 注意：GitHub Actions 使用 UTC 时间，且调度时间可能不精确（通常在指定时间的几分钟内）
+    - cron: '* * * * *'
+  workflow_dispatch: # 允许手动触发
+
+jobs:
+  process-votes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.COLLABORATOR_TOKEN }}
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: |
+          npm install @octokit/rest
+
+      - name: Process votes
+        env:
+          COLLABORATOR_TOKEN: ${{ secrets.COLLABORATOR_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO_OWNER: ${{ github.repository_owner }}
+          REPO_NAME: ${{ github.event.repository.name }}
+        run: |
+          node << 'EOF'
+          const { Octokit } = require('@octokit/rest');
+          const fs = require('fs');
+          const path = require('path');
+          const { execSync } = require('child_process');
+
+          // 获取令牌
+          const token = process.env.COLLABORATOR_TOKEN;
+          if (!token) {
+            console.error('No COLLABORATOR_TOKEN found');
+            process.exit(1);
+          }
+
+          const repoOwner = process.env.REPO_OWNER;
+          const repoName = process.env.REPO_NAME;
+          const issueNumber = 1;
+          const maxCommitsPerRequest = 100;
+          const votingJsonPath = '.voting.json';
+          const votingZipPath = '.voting.zip';
+
+          // 初始化 Octokit
+          const octokit = new Octokit({ auth: token });
+
+          // 从API响应头中获取剩余调用次数并检查限制
+          function checkApiLimitRemaining(response) {
+            if (!response || !response.headers) {
+              return true; // 如果没有响应头信息，继续执行
+            }
+            
+            const remaining = parseInt(response.headers['x-ratelimit-remaining']);
+            
+            // 如果剩余次数太少（小于100），停止工作流
+            if (remaining < 100) {
+              console.warn(`API limit is low (${remaining} remaining), stopping to avoid rate limit...`);
+              return false;
+            }
+            
+            return true;
+          }
+
+          // 读取.voting.json文件
+          async function loadVotingJson() {
+            try {
+              console.log(`[DEBUG] Loading .voting.json from ${repoOwner}/${repoName}...`);
+              const response = await octokit.rest.repos.getContent({
+                owner: repoOwner,
+                repo: repoName,
+                path: votingJsonPath
+              });
+              
+              if (!checkApiLimitRemaining(response)) {
+                throw new Error('API limit reached');
+              }
+              
+              const { data } = response;
+              console.log(`[DEBUG] File exists: ${data.type === 'file'}, encoding: ${data.encoding}`);
+
+              if (data.type === 'file' && data.encoding === 'base64') {
+                const content = Buffer.from(data.content, 'base64').toString('utf8');
+                const votingData = JSON.parse(content);
+                // last_commit 现在是已处理的评论数量（索引），不是评论ID
+                console.log(`[DEBUG] Loaded .voting.json: last_commit=${votingData.last_commit || 0} (processed count), sha=${data.sha}`);
+                console.log(`[DEBUG] Voting data stats: likes=${votingData.likes}, hates=${votingData.hates}, pass=${votingData.pass}, articles=${votingData.articles?.length || 0}`);
+                return {
+                  data: votingData,
+                  sha: data.sha,
+                  exists: true
+                };
+              }
+            } catch (error) {
+              if (error.status === 404) {
+                console.log(`[DEBUG] .voting.json does not exist (404), will create new`);
+                return {
+                  data: {
+                    last_commit: 0,
+                    authors: [],
+                    readers: [],
+                    likes: 0,
+                    hates: 0,
+                    pass: 0,
+                    daily_voting: 0,
+                    articles: []
+                  },
+                  sha: null,
+                  exists: false
+                };
+              }
+              console.error(`[DEBUG] Error loading .voting.json:`, error.message, error.status);
+              throw error;
+            }
+          }
+
+          // 保存.voting.json文件
+          async function saveVotingJson(votingData, sha) {
+              console.log(`[DEBUG] Saving .voting.json with sha=${sha || 'null (new file)'}`);
+            console.log(`[DEBUG] Voting data to save: last_commit=${votingData.last_commit} (processed count), likes=${votingData.likes}, hates=${votingData.hates}, pass=${votingData.pass}`);
+            const content = Buffer.from(JSON.stringify(votingData, null, 2)).toString('base64');
+            
+            const response = await octokit.rest.repos.createOrUpdateFileContents({
+              owner: repoOwner,
+              repo: repoName,
+              path: votingJsonPath,
+              message: 'Update voting data',
+              content: content,
+              sha: sha,
+              committer: {
+                name: 'Vote Workflow Bot',
+                email: 'vote-workflow@dipcp.local'
+              }
+            });
+            
+            if (!checkApiLimitRemaining(response)) {
+              throw new Error('API limit reached');
+            }
+            console.log(`[DEBUG] Successfully saved .voting.json, commit sha: ${response.data?.commit?.sha || 'N/A'}`);
+          }
+
+          // 压缩.voting.json为.voting.zip
+          function compressVotingJson() {
+            try {
+              if (fs.existsSync(votingZipPath)) {
+                fs.unlinkSync(votingZipPath);
+              }
+              execSync(`zip -q ${votingZipPath} ${votingJsonPath}`, { stdio: 'inherit' });
+              console.log(`Created ${votingZipPath}`);
+            } catch (error) {
+              console.error(`Failed to compress ${votingJsonPath}:`, error.message);
+              throw error;
+            }
+          }
+
+          // 提交.voting.zip文件
+          async function commitVotingZip() {
+            try {
+              console.log(`[DEBUG] Reading ${votingZipPath} from disk...`);
+              const zipContent = fs.readFileSync(votingZipPath);
+              const zipBase64 = zipContent.toString('base64');
+              console.log(`[DEBUG] Zip file size: ${zipContent.length} bytes, base64 length: ${zipBase64.length}`);
+              
+              // 检查文件是否已存在
+              let zipSha = null;
+              try {
+                console.log(`[DEBUG] Checking if ${votingZipPath} exists in repository...`);
+                const response = await octokit.rest.repos.getContent({
+                  owner: repoOwner,
+                  repo: repoName,
+                  path: votingZipPath
+                });
+                
+                if (!checkApiLimitRemaining(response)) {
+                  throw new Error('API limit reached');
+                }
+                
+                const { data } = response;
+                if (data.type === 'file') {
+                  zipSha = data.sha;
+                  console.log(`[DEBUG] File exists, current sha: ${zipSha}`);
+                }
+              } catch (error) {
+                if (error.status !== 404) {
+                  console.error(`[DEBUG] Error checking file existence:`, error.message, error.status);
+                  throw error;
+                }
+                console.log(`[DEBUG] File does not exist (404), will create new`);
+              }
+
+              console.log(`[DEBUG] Committing ${votingZipPath} with sha=${zipSha || 'null (new file)'}`);
+              const updateResponse = await octokit.rest.repos.createOrUpdateFileContents({
+                owner: repoOwner,
+                repo: repoName,
+                path: votingZipPath,
+                message: 'Update voting data (compressed)',
+                content: zipBase64,
+                sha: zipSha,
+                committer: {
+                  name: 'Vote Workflow Bot',
+                  email: 'vote-workflow@dipcp.local'
+                }
+              });
+              
+              if (!checkApiLimitRemaining(updateResponse)) {
+                throw new Error('API limit reached');
+              }
+              
+              console.log(`[DEBUG] Successfully committed ${votingZipPath}, commit sha: ${updateResponse.data?.commit?.sha || 'N/A'}`);
+            } catch (error) {
+              console.error(`[DEBUG] Failed to commit ${votingZipPath}:`, error.message, error.status);
+              throw error;
+            }
+          }
+
+          // 获取Issue的commits（评论）
+          // skipCount: 已处理的评论数量（索引），跳过前 skipCount 条评论
+          // 每次调用返回最多100条评论，分页由主循环处理
+          async function getIssueCommits(skipCount = 0) {
+            try {
+              // 计算需要从第几页开始，以及在该页中需要跳过多少条
+              const page = Math.floor(skipCount / maxCommitsPerRequest) + 1;
+              const skipInPage = skipCount % maxCommitsPerRequest;
+              
+              console.log(`[DEBUG] Getting issue comments: skipCount=${skipCount}, page=${page}, skipInPage=${skipInPage}`);
+
+              const response = await octokit.rest.issues.listComments({
+                owner: repoOwner,
+                repo: repoName,
+                issue_number: issueNumber,
+                per_page: maxCommitsPerRequest,
+                page: page,
+                sort: 'created',
+                direction: 'asc'
+              });
+              
+              if (!checkApiLimitRemaining(response)) {
+                console.log(`[DEBUG] API limit reached, returning empty array`);
+                return [];
+              }
+              
+              const { data: comments } = response;
+              console.log(`[DEBUG] Retrieved ${comments.length} comments from issue #${issueNumber}, page ${page}`);
+
+              if (comments.length === 0) {
+                console.log(`[DEBUG] No comments found on page ${page}`);
+                return [];
+              }
+
+              // 跳过前 skipInPage 条评论
+              const result = comments.slice(skipInPage);
+              console.log(`[DEBUG] Skipped ${skipInPage} comments, returning ${result.length} comments from page ${page}`);
+              
+              return result;
+            } catch (error) {
+              console.error(`[DEBUG] Failed to get issue commits:`, error.message, error.status);
+              throw error;
+            }
+          }
+
+          // 解析投票数据（数组格式：path和vote的数组）
+          function parseVoteData(body) {
+            try {
+              // 尝试解析JSON格式的数组
+              // 格式：[{path: "xxx", vote: 1}, {path: "xxx", vote: -1}]
+              const jsonMatch = body.match(/\[[\s\S]*\]/);
+              if (jsonMatch) {
+                const voteArray = JSON.parse(jsonMatch[0]);
+                if (Array.isArray(voteArray)) {
+                  return voteArray.filter(item => 
+                    item && 
+                    typeof item.path === 'string' && 
+                    (item.vote === -1 || item.vote === 0 || item.vote === 1)
+                  );
+                }
+              }
+              return null;
+            } catch (e) {
+              console.warn('Failed to parse vote data:', e.message);
+              return null;
+            }
+          }
+
+          // 从文件路径中提取作者（路径格式：项目名/所有者/文件路径/文件名）
+          function getAuthorFromPath(filePath) {
+            const parts = filePath.split('/');
+            if (parts.length >= 2) {
+              return parts[1]; // 所有者就是作者
+            }
+            return null;
+          }
+
+          // 在主voting数据中查找或创建文章记录
+          function findOrCreateArticle(votingData, articlePath) {
+            let article = votingData.articles.find(a => a.path === articlePath);
+            if (!article) {
+              article = {
+                path: articlePath,
+                voting: [],
+                likes: 0,
+                hates: 0,
+                pass: 0
+              };
+              votingData.articles.push(article);
+            }
+            return article;
+          }
+
+          // 处理单个commit（评论）
+          async function processCommit(comment, votingData) {
+            const username = comment.user.login;
+            console.log(`[DEBUG] Processing comment ${comment.id} from user ${username}`);
+            console.log(`[DEBUG] Comment body preview: ${comment.body.substring(0, 100)}...`);
+            
+            // 将用户添加到读者列表（如果不存在）
+            if (!votingData.readers.includes(username)) {
+              votingData.readers.push(username);
+              votingData.readers.sort(); // 按字母排序
+              console.log(`[DEBUG] Added ${username} to readers list`);
+            }
+
+            // 解析投票数据
+            const voteArray = parseVoteData(comment.body);
+            if (!voteArray || voteArray.length === 0) {
+              console.log(`[DEBUG] Comment ${comment.id}: No valid vote data, skipping`);
+              return false;
+            }
+            console.log(`[DEBUG] Comment ${comment.id}: Parsed ${voteArray.length} vote items`);
+
+            let hasChanges = false;
+
+            // 处理每个投票
+            for (const voteItem of voteArray) {
+              const articlePath = voteItem.path;
+              const vote = voteItem.vote; // -1: 点踩, 0: 路过, 1: 点赞
+              console.log(`[DEBUG] Processing vote: path=${articlePath}, vote=${vote}, user=${username}`);
+
+              // 从路径中提取作者
+              const author = getAuthorFromPath(articlePath);
+              if (author) {
+                // 将作者添加到作者列表（如果不存在）
+                if (!votingData.authors.includes(author)) {
+                  votingData.authors.push(author);
+                  votingData.authors.sort(); // 按字母排序
+                  console.log(`[DEBUG] Added author ${author} to authors list`);
+                }
+
+                // 确认发起issue的不是文章的作者
+                if (author.toLowerCase() === username.toLowerCase()) {
+                  console.log(`[DEBUG] Comment ${comment.id}: User ${username} is the author of ${articlePath}, skipping`);
+                  continue;
+                }
+              }
+
+              // 查找或创建文章记录
+              const article = findOrCreateArticle(votingData, articlePath);
+
+              // 创建以path为key的hashmap，再为每个voting以username为key的hashmap
+              // 查找该用户是否已对该文章投过票
+              const existingVoteIndex = article.voting.findIndex(v => v.username === username);
+              const existingVote = existingVoteIndex >= 0 ? article.voting[existingVoteIndex] : null;
+
+              // 如果有，并且结果一致，就忽略
+              if (existingVote && existingVote.vote === vote) {
+                console.log(`[DEBUG] User ${username} already voted ${vote} for ${articlePath}, skipping`);
+                continue;
+              }
+
+              // 如果没有或结果不一致，就添加或修改记录
+              hasChanges = true;
+              console.log(`[DEBUG] Vote changed for ${articlePath}: ${existingVote ? `from ${existingVote.vote} to ${vote}` : `new vote ${vote}`}`);
+
+              // 先撤销之前的投票（如果有）
+              if (existingVote) {
+                const previousVote = existingVote.vote;
+                // 更新文章统计
+                if (previousVote === 1) {
+                  article.likes = Math.max(0, article.likes - 1);
+                  votingData.likes = Math.max(0, votingData.likes - 1);
+                } else if (previousVote === -1) {
+                  article.hates = Math.max(0, article.hates - 1);
+                  votingData.hates = Math.max(0, votingData.hates - 1);
+                } else if (previousVote === 0) {
+                  article.pass = Math.max(0, article.pass - 1);
+                  votingData.pass = Math.max(0, votingData.pass - 1);
+                }
+                // 更新投票记录
+                existingVote.vote = vote;
+              } else {
+                // 添加新投票记录
+                article.voting.push({
+                  username: username,
+                  vote: vote
+                });
+              }
+
+              // 更新本文章和本作品的likes、hates、pass的数目
+              if (vote === 1) {
+                article.likes = (article.likes || 0) + 1;
+                votingData.likes = (votingData.likes || 0) + 1;
+              } else if (vote === -1) {
+                article.hates = (article.hates || 0) + 1;
+                votingData.hates = (votingData.hates || 0) + 1;
+              } else if (vote === 0) {
+                article.pass = (article.pass || 0) + 1;
+                votingData.pass = (votingData.pass || 0) + 1;
+              }
+
+              // 更新每日投票数
+              votingData.daily_voting = (votingData.daily_voting || 0) + 1;
+            }
+
+            console.log(`[DEBUG] Comment ${comment.id} processed: hasChanges=${hasChanges}`);
+            return hasChanges;
+          }
+
+          // 主处理流程
+          async function main() {
+            try {
+              console.log(`[DEBUG] ========== Starting Vote Workflow ==========`);
+              console.log(`[DEBUG] Repository: ${repoOwner}/${repoName}`);
+              console.log(`[DEBUG] Issue number: ${issueNumber}`);
+              
+              // 读取.voting.json文件
+              console.log('[DEBUG] Step 1: Loading .voting.json...');
+              const votingFile = await loadVotingJson();
+              let votingData = votingFile.data;
+              console.log(`[DEBUG] Loaded voting file: exists=${votingFile.exists}, sha=${votingFile.sha || 'null'}`);
+
+              // 读取已处理的评论数量（索引），last_commit 现在是已处理的评论数量，不是评论ID
+              let processedCount = votingData.last_commit || 0;
+              console.log(`[DEBUG] Step 2: Starting from processed count: ${processedCount} (will skip first ${processedCount} comments)`);
+
+              let totalProcessed = 0;
+              let shouldStop = false;
+              let loopCount = 0;
+
+              while (!shouldStop) {
+                loopCount++;
+                console.log(`[DEBUG] ========== Loop iteration ${loopCount} ==========`);
+                
+                // 从已处理数量之后开始获取评论，跳过前 processedCount 条
+                console.log(`[DEBUG] Step 3.${loopCount}: Getting commits after processed count ${processedCount}...`);
+                const commits = await getIssueCommits(processedCount);
+                
+                if (commits.length === 0) {
+                  console.log(`[DEBUG] No new commits to process after processed count: ${processedCount}`);
+                  break;
+                }
+
+                console.log(`[DEBUG] Step 4.${loopCount}: Processing ${commits.length} commits...`);
+
+                // 每条commit依次处理
+                for (let i = 0; i < commits.length; i++) {
+                  const commit = commits[i];
+                  console.log(`[DEBUG] Processing commit ${i + 1}/${commits.length}: ID=${commit.id}, user=${commit.user?.login}`);
+                  const hasChanges = await processCommit(commit, votingData);
+                  if (hasChanges) {
+                    totalProcessed++;
+                  }
+                }
+
+                // 更新已处理的评论数量
+                processedCount += commits.length;
+                votingData.last_commit = processedCount;
+                console.log(`[DEBUG] Processed ${commits.length} commits, total processed: ${totalProcessed} with changes, updated processed count to: ${processedCount}`);
+
+                // 判断获取的commit数量
+                // 如果数量不足100，就保存.voting.json，再将其压缩为.voting.zip格式，提交修改，结束工作流
+                if (commits.length < maxCommitsPerRequest) {
+                  console.log(`[DEBUG] Stopping: commits=${commits.length} (less than ${maxCommitsPerRequest})`);
+                  shouldStop = true;
+                }
+              }
+
+              console.log(`[DEBUG] ========== Processing complete, saving files ==========`);
+              console.log(`[DEBUG] Final stats: total commits processed with changes: ${totalProcessed}`);
+              console.log(`[DEBUG] Final voting data: likes=${votingData.likes}, hates=${votingData.hates}, pass=${votingData.pass}, last_commit=${votingData.last_commit}`);
+
+              // 保存.voting.json
+              console.log('[DEBUG] Step 5: Saving .voting.json...');
+              await saveVotingJson(votingData, votingFile.sha);
+
+              // 将.voting.json写入本地文件以便压缩
+              console.log('[DEBUG] Step 6: Writing .voting.json to local file...');
+              fs.writeFileSync(votingJsonPath, JSON.stringify(votingData, null, 2), 'utf8');
+              console.log(`[DEBUG] Written ${votingJsonPath} to disk`);
+
+              // 压缩为.voting.zip格式
+              console.log('[DEBUG] Step 7: Compressing .voting.json to .voting.zip...');
+              compressVotingJson();
+
+              // 提交修改
+              console.log('[DEBUG] Step 8: Committing .voting.zip...');
+              await commitVotingZip();
+
+              console.log(`[DEBUG] ========== All steps completed successfully ==========`);
+            } catch (error) {
+              console.error('[DEBUG] ========== Main process error ==========');
+              console.error('[DEBUG] Error details:', error);
+              console.error('[DEBUG] Error message:', error.message);
+              console.error('[DEBUG] Error stack:', error.stack);
+              process.exit(1);
+            }
+          }
+
+          main();
+          EOF

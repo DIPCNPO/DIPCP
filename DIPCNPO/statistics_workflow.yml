@@ -1,0 +1,436 @@
+name: Statistics Workflow
+
+on:
+  schedule:
+    # 每24小时触发一次（每天UTC 0点）
+    - cron: '0 0 * * *'
+  workflow_dispatch: # 允许手动触发
+
+jobs:
+  process-statistics:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: |
+          npm install @octokit/rest
+
+      - name: Process statistics
+        env:
+          COLLABORATOR_TOKEN: ${{ secrets.COLLABORATOR_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          node << 'EOF'
+          const { Octokit } = require('@octokit/rest');
+          const fs = require('fs');
+          const path = require('path');
+          const { execSync } = require('child_process');
+
+          // 获取令牌
+          const token = process.env.COLLABORATOR_TOKEN || process.env.GITHUB_TOKEN;
+          if (!token) {
+            console.error('No token found');
+            process.exit(1);
+          }
+
+          const octokit = new Octokit({ auth: token });
+          const creationsOwner = 'DIPCNPO';
+          const creationsRepo = 'creations';
+          const votingJsonPath = '.voting.json';
+
+          // 读取 raw 文件内容，避免频繁调用 API
+          async function fetchRawFileContent(owner, repo, filePath, branch = 'main') {
+            const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${filePath}`;
+            const headers = {};
+            if (token) {
+              headers.Authorization = `Bearer ${token}`;
+            }
+
+            const response = await fetch(rawUrl, { headers });
+            if (response.status === 200) {
+              return await response.text();
+            }
+            if (response.status === 404) {
+              return null;
+            }
+            throw new Error(`Failed to fetch raw file ${rawUrl}: ${response.status} ${response.statusText}`);
+          }
+
+          // 获取文件的 SHA（仅在需要写入时调用 API）
+          async function getFileSha(owner, repo, filePath, branch = 'main') {
+            try {
+              const { data } = await octokit.rest.repos.getContent({
+                owner,
+                repo,
+                path: filePath,
+                ref: branch
+              });
+              if (data.type === 'file') {
+                return data.sha;
+              }
+            } catch (error) {
+              if (error.status === 404) {
+                return null;
+              }
+              throw error;
+            }
+            return null;
+          }
+
+          // 创建或更新文件
+          async function createOrUpdateFile(owner, repo, filePath, content, message, sha = null, branch = 'main') {
+            const contentBase64 = Buffer.from(content).toString('base64');
+            
+            return await octokit.rest.repos.createOrUpdateFileContents({
+              owner,
+              repo,
+              path: filePath,
+              message,
+              content: contentBase64,
+              sha: sha || undefined,
+              branch,
+              committer: {
+                name: 'Statistics Workflow Bot',
+                email: 'statistics-workflow@dipcp.local'
+              }
+            });
+          }
+
+          // 解析 TSV 文件
+          function parseTSV(tsvContent) {
+            const lines = tsvContent.trim().split('\n');
+            if (lines.length === 0) return [];
+
+            const header = lines[0].split('\t');
+            const rows = [];
+
+            for (let i = 1; i < lines.length; i++) {
+              const values = lines[i].split('\t');
+              const row = {};
+              header.forEach((key, index) => {
+                row[key] = values[index] || '';
+              });
+              rows.push(row);
+            }
+
+            return rows;
+          }
+
+          // 生成 TSV 内容
+          function generateTSV(rows) {
+            const header = ['repository', 'createdAt', 'name', 'description', 'language', 'category', 
+                          'articles', 'authors', 'readers', 'likes', 'hates', 'pass', 'daily_voting'];
+            
+            const lines = [header.join('\t')];
+            
+            rows.forEach(row => {
+              const values = header.map(key => {
+                const value = row[key] || '';
+                // 转义制表符
+                return String(value).replace(/\t/g, ' ');
+              });
+              lines.push(values.join('\t'));
+            });
+
+            return lines.join('\n') + '\n';
+          }
+
+          // 从仓库路径解析 owner 和 repo
+          function parseRepository(repository) {
+            const parts = repository.split('/');
+            if (parts.length >= 2) {
+              return {
+                owner: parts[0],
+                repo: parts[1]
+              };
+            }
+            return null;
+          }
+
+          // 检查仓库是否存在
+          async function repositoryExists(owner, repo) {
+            try {
+              await octokit.rest.repos.get({
+                owner,
+                repo
+              });
+              return true;
+            } catch (error) {
+              if (error.status === 404) {
+                return false;
+              }
+              throw error;
+            }
+          }
+
+          // 获取仓库的 .voting.json
+          async function getVotingJson(repository) {
+            const repoInfo = parseRepository(repository);
+            if (!repoInfo) {
+              console.warn(`Invalid repository format: ${repository}`);
+              return null;
+            }
+
+            try {
+              const content = await fetchRawFileContent(repoInfo.owner, repoInfo.repo, votingJsonPath);
+              if (content !== null) {
+                return JSON.parse(content);
+              }
+            } catch (error) {
+              console.warn(`Failed to get .voting.json for ${repository}: ${error.message}`);
+            }
+            return null;
+          }
+
+          // 统计数据
+          function calculateStatistics(votingData) {
+            if (!votingData) {
+              return {
+                articles: 0,
+                authors: 0,
+                readers: 0,
+                likes: 0,
+                hates: 0,
+                pass: 0,
+                daily_voting: 0
+              };
+            }
+
+            return {
+              articles: votingData.articles ? votingData.articles.length : 0,
+              authors: votingData.authors ? votingData.authors.length : 0,
+              readers: votingData.readers ? votingData.readers.length : 0,
+              likes: votingData.likes || 0,
+              hates: votingData.hates || 0,
+              pass: votingData.pass || 0,
+              daily_voting: votingData.daily_voting || 0
+            };
+          }
+
+          // 生成排行榜 Markdown
+          function generateRankingMarkdown(title, data, sortKey, limit = 100) {
+            // 排序
+            const sorted = [...data].sort((a, b) => {
+              const aVal = parseInt(a[sortKey]) || 0;
+              const bVal = parseInt(b[sortKey]) || 0;
+              return bVal - aVal; // 降序
+            });
+
+            // 取前100位
+            const top = sorted.slice(0, limit);
+
+            let md = `# ${title}\n\n`;
+            md += `更新时间: ${new Date().toISOString()}\n\n`;
+            md += `| 排名 | 作品名称 | 仓库 | ${sortKey} |\n`;
+            md += `|------|----------|------|----------|\n`;
+
+            top.forEach((item, index) => {
+              const rank = index + 1;
+              const name = item.name || '未命名';
+              const repo = item.repository || '';
+              const value = item[sortKey] || 0;
+              md += `| ${rank} | ${name} | ${repo} | ${value} |\n`;
+            });
+
+            return md;
+          }
+
+          // 主处理流程
+          async function main() {
+            try {
+              console.log('Starting statistics workflow...');
+
+              // 1. 获取 creations.tsv
+              console.log('Reading creations.tsv...');
+              const creationsContent = await fetchRawFileContent(creationsOwner, creationsRepo, 'creations.tsv');
+              if (creationsContent === null) {
+                console.error('creations.tsv not found');
+                process.exit(1);
+              }
+              const creationsSha = await getFileSha(creationsOwner, creationsRepo, 'creations.tsv');
+              const creationsFile = {
+                content: creationsContent,
+                sha: creationsSha,
+                exists: creationsSha !== null
+              };
+
+              const tsvContent = creationsFile.content;
+              const rows = parseTSV(tsvContent);
+              console.log(`Found ${rows.length} repositories`);
+
+              // 2. 循环处理每个作品
+              const updatedRows = [];
+              let processedCount = 0;
+              let errorCount = 0;
+              let removedCount = 0;
+
+              for (const row of rows) {
+                const repository = row.repository;
+                if (!repository) {
+                  // 如果没有仓库信息，保留该行
+                  updatedRows.push(row);
+                  continue;
+                }
+
+                console.log(`Processing ${repository}...`);
+
+                try {
+                  // 检查仓库是否存在
+                  const repoInfo = parseRepository(repository);
+                  if (!repoInfo) {
+                    console.warn(`Invalid repository format: ${repository}, removing from TSV`);
+                    removedCount++;
+                    continue;
+                  }
+
+                  const repoExists = await repositoryExists(repoInfo.owner, repoInfo.repo);
+                  if (!repoExists) {
+                    console.warn(`Repository ${repository} not found, removing from TSV`);
+                    removedCount++;
+                    continue;
+                  }
+
+                  // 获取 .voting.json
+                  const votingData = await getVotingJson(repository);
+                  
+                  // 如果找不到 .voting.json，删除该条目
+                  if (votingData === null) {
+                    console.warn(`.voting.json not found for ${repository}, removing from TSV`);
+                    removedCount++;
+                    continue;
+                  }
+                  
+                  // 统计数据
+                  const stats = calculateStatistics(votingData);
+                  
+                  // 更新行数据
+                  const updatedRow = {
+                    ...row,
+                    articles: stats.articles,
+                    authors: stats.authors,
+                    readers: stats.readers,
+                    likes: stats.likes,
+                    hates: stats.hates,
+                    pass: stats.pass,
+                    daily_voting: stats.daily_voting
+                  };
+
+                  updatedRows.push(updatedRow);
+                  processedCount++;
+
+                  // 避免API限制，稍微延迟
+                  await new Promise(resolve => setTimeout(resolve, 200));
+                } catch (error) {
+                  console.error(`Error processing ${repository}: ${error.message}`);
+                  // 如果处理出错，也删除该条目
+                  console.warn(`Removing ${repository} from TSV due to error`);
+                  removedCount++;
+                  errorCount++;
+                }
+              }
+
+              console.log(`Processed: ${processedCount}, Errors: ${errorCount}, Removed: ${removedCount}`);
+
+              // 3. 生成新的 TSV 内容
+              const newTsvContent = generateTSV(updatedRows);
+
+              // 4. 生成5个排行榜
+              const rankings = [
+                { key: 'articles', title: '文章数排行榜' },
+                { key: 'authors', title: '作者数排行榜' },
+                { key: 'readers', title: '读者数排行榜' },
+                { key: 'likes', title: '点赞数排行榜' },
+                { key: 'daily_voting', title: '每日投票数排行榜' }
+              ];
+
+              const rankingFiles = [];
+              for (const ranking of rankings) {
+                const mdContent = generateRankingMarkdown(ranking.title, updatedRows, ranking.key, 100);
+                const fileName = `ranking-${ranking.key}.md`;
+                rankingFiles.push({ fileName, content: mdContent });
+                console.log(`Generated ${fileName}`);
+              }
+
+              // 5. 批量提交修改
+              console.log('Committing changes...');
+
+              // 更新 creations.tsv
+              await createOrUpdateFile(
+                creationsOwner,
+                creationsRepo,
+                'creations.tsv',
+                newTsvContent,
+                'Update statistics from .voting.json files',
+                creationsFile.sha
+              );
+              console.log('✅ creations.tsv updated');
+
+              // 压缩 creations.tsv 为 creations.zip
+              const tempTsvPath = '/tmp/creations.tsv';
+              fs.writeFileSync(tempTsvPath, newTsvContent, 'utf8');
+              
+              const zipPath = '/tmp/creations.zip';
+              if (fs.existsSync(zipPath)) {
+                fs.unlinkSync(zipPath);
+              }
+              execSync(`zip -q ${zipPath} ${tempTsvPath}`, { stdio: 'inherit' });
+              
+              const zipContent = fs.readFileSync(zipPath);
+              const zipBase64 = zipContent.toString('base64');
+              
+              const zipSha = await getFileSha(creationsOwner, creationsRepo, 'creations.zip');
+              
+              await octokit.rest.repos.createOrUpdateFileContents({
+                owner: creationsOwner,
+                repo: creationsRepo,
+                path: 'creations.zip',
+                message: 'Update voting data (compressed)',
+                content: zipBase64,
+                sha: zipSha || null,
+                committer: {
+                  name: 'Statistics Workflow Bot',
+                  email: 'statistics-workflow@dipcp.local'
+                }
+              });
+              console.log('✅ creations.zip updated');
+
+              // 提交排行榜文件
+              for (const rankingFile of rankingFiles) {
+                const existingSha = await getFileSha(creationsOwner, creationsRepo, rankingFile.fileName);
+                await createOrUpdateFile(
+                  creationsOwner,
+                  creationsRepo,
+                  rankingFile.fileName,
+                  rankingFile.content,
+                  `Update ${rankingFile.fileName}`,
+                  existingSha
+                );
+                console.log(`✅ ${rankingFile.fileName} updated`);
+              }
+
+              // 清理临时文件
+              fs.unlinkSync(tempTsvPath);
+              fs.unlinkSync(zipPath);
+
+              console.log('✅ All statistics updated successfully');
+            } catch (error) {
+              console.error('❌ Error in statistics workflow:', error);
+              process.exit(1);
+            }
+          }
+
+          main();
+          EOF

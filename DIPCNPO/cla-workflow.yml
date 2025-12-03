@@ -1,0 +1,372 @@
+name: CLA Submission and Transfer
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  process-cla-submission:
+    runs-on: ubuntu-latest
+    if: contains(github.event.issue.title, 'CLA Submission')
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Checkout Projects repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: |
+          npm install @octokit/rest
+
+      - name: Process CLA submission
+        env:
+          CLA_REPOSITORY_TOKEN: ${{ secrets.CLA_REPOSITORY_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          REPO_OWNER: ${{ github.repository_owner }}
+          REPO_NAME: ${{ github.event.repository.name }}
+        run: |
+          node << 'EOF'
+          const { Octokit } = require('@octokit/rest');
+          const fs = require('fs');
+          const path = require('path');
+          const { execSync } = require('child_process');
+
+          // 获取环境变量
+          const claToken = process.env.CLA_REPOSITORY_TOKEN;
+          const githubToken = process.env.GITHUB_TOKEN;
+          const issueTitle = process.env.ISSUE_TITLE;
+          const issueBody = process.env.ISSUE_BODY;
+          const issueNumber = parseInt(process.env.ISSUE_NUMBER);
+          // 工作流触发的仓库（DIPCNPO/creations）
+          const workflowRepoOwner = process.env.REPO_OWNER;
+          const workflowRepoName = process.env.REPO_NAME;
+
+          // 初始化 Octokit 客户端
+          const claOctokit = new Octokit({ auth: claToken });
+          const githubOctokit = new Octokit({ auth: githubToken });
+
+          // 提取用户名（格式：CLA Submission - username）
+          function extractUsername(title) {
+            const match = title.match(/CLA\s+Submission\s+-\s+(.+)/);
+            if (match && match[1]) {
+              return match[1].trim();
+            }
+            throw new Error(`Could not extract username from title: ${title}`);
+          }
+
+          // 提取仓库信息（从 **repository:** JSON）
+          function extractRepoInfo(body) {
+            const repoMatch = body.match(/\*\*repository[：:]\*\*\s*(.+)/);
+            if (!repoMatch || !repoMatch[1]) {
+              return null;
+            }
+
+            let repoJson = repoMatch[1].trim();
+            // 移除可能的引号
+            if ((repoJson.startsWith('"') && repoJson.endsWith('"')) ||
+                (repoJson.startsWith("'") && repoJson.endsWith("'"))) {
+              repoJson = repoJson.slice(1, -1);
+            }
+
+            if (!repoJson || repoJson === 'null' || repoJson === '') {
+              return null;
+            }
+
+            try {
+              const repoInfo = JSON.parse(repoJson);
+              return {
+                owner: repoInfo.owner || '',
+                repo: repoInfo.repo || '',
+                name: repoInfo.name || '',
+                description: repoInfo.description || '',
+                language: repoInfo.language || '',
+                category: repoInfo.category || '',
+                repository: repoInfo.repository || ''
+              };
+            } catch (e) {
+              console.warn('Failed to parse repository JSON:', e.message);
+              return null;
+            }
+          }
+
+          // 生成 CLA 文件名
+          function generateClaFilename(username) {
+            const now = new Date();
+            const timestamp = now.toISOString().replace(/[:.]/g, '-').replace('T', 'T').split('.')[0] + '-000Z';
+            return `${username}_${timestamp}.md`;
+          }
+
+          // 读取或创建文件
+          async function getFileContent(octokit, owner, repo, filePath, branch = 'main') {
+            try {
+              const { data } = await octokit.rest.repos.getContent({
+                owner,
+                repo,
+                path: filePath,
+                ref: branch
+              });
+
+              if (data.type === 'file' && data.encoding === 'base64') {
+                const content = Buffer.from(data.content, 'base64').toString('utf8');
+                return {
+                  content,
+                  sha: data.sha,
+                  exists: true
+                };
+              }
+            } catch (error) {
+              if (error.status === 404) {
+                return {
+                  content: null,
+                  sha: null,
+                  exists: false
+                };
+              }
+              throw error;
+            }
+            return {
+              content: null,
+              sha: null,
+              exists: false
+            };
+          }
+
+          // 创建或更新文件
+          async function createOrUpdateFile(octokit, owner, repo, filePath, content, message, sha = null, branch = 'main') {
+            const contentBase64 = Buffer.from(content).toString('base64');
+            
+            return await octokit.rest.repos.createOrUpdateFileContents({
+              owner,
+              repo,
+              path: filePath,
+              message,
+              content: contentBase64,
+              sha: sha || undefined,
+              branch,
+              committer: {
+                name: 'CLA Transfer Bot',
+                email: 'cla-transfer@DIPCNPO.org'
+              }
+            });
+          }
+
+          // 主处理流程
+          async function main() {
+            try {
+              // 提取信息
+              const username = extractUsername(issueTitle);
+              console.log(`Extracted username: ${username}`);
+
+              const repoInfo = extractRepoInfo(issueBody);
+              const isRootAuthor = repoInfo && repoInfo.name ? true : false;
+              
+              console.log(`=== Root Author Check ===`);
+              console.log(`Repo Info:`, repoInfo);
+              console.log(`Is Root Author:`, isRootAuthor);
+              
+              // 从 issue body 提取的项目仓库信息
+              const projectRepoOwner = repoInfo?.owner || 'DIPCNPO';
+              const projectRepoName = repoInfo?.repo || 'creations';
+              const repository = repoInfo?.repository || `${projectRepoOwner}/${projectRepoName}`;
+
+              console.log(`Project Repository: ${repository}`);
+              console.log(`Workflow Repository: ${workflowRepoOwner}/${workflowRepoName}`);
+              console.log(`Is root author: ${isRootAuthor}`);
+
+              // 生成文件名
+              const claFilename = generateClaFilename(username);
+              console.log(`CLA filename: ${claFilename}`);
+
+              // 1. 创建 CLA 文件到 DIPCNPO/CLA 仓库
+              // 移除 repository 部分，只保留 CLA 内容
+              let claContent = issueBody;
+              // 查找 --- 分隔符和 **repository:** 部分
+              const repoMatch = claContent.match(/\n---\s*\n\s*\*\*repository[：:]\*\*/);
+              if (repoMatch) {
+                // 只保留分隔符之前的内容
+                claContent = claContent.substring(0, repoMatch.index).trim();
+              }
+              
+              console.log('Creating CLA file in DIPCNPO/CLA...');
+              await createOrUpdateFile(
+                claOctokit,
+                'DIPCNPO',
+                'CLA',
+                claFilename,
+                claContent,
+                `Add CLA file from ${workflowRepoOwner}/${workflowRepoName} Issue #${issueNumber}\n\n- User: ${username}\n- File: ${claFilename}\n- Issue: #${issueNumber}`
+              );
+              console.log('✅ CLA file created');
+
+              // 2. 如果是根作者，更新 creations.tsv
+              if (isRootAuthor) {
+                console.log('Processing root author - updating creations.tsv...');
+                
+                // 读取现有的 creations.tsv
+                const creationsFile = await getFileContent(claOctokit, 'DIPCNPO', 'creations', 'creations.tsv');
+                
+                let tsvContent = '';
+                let tsvSha = null;
+                
+                if (creationsFile.exists) {
+                  tsvContent = creationsFile.content;
+                  tsvSha = creationsFile.sha;
+                } else {
+                  // 创建新的 TSV 文件，包含表头
+                  tsvContent = 'repository\tcreatedAt\tname\tdescription\tlanguage\tcategory\tarticles\tauthors\treaders\tlikes\thates\tpass\tdaily_voting\n';
+                }
+
+                // 检查是否已存在
+                const repositoryLine = tsvContent.split('\n').find(line => line.startsWith(`${repository}\t`));
+                if (repositoryLine) {
+                  console.log(`⚠️  Repository ${repository} already exists in creations.tsv, skipping...`);
+                } else {
+                  // 添加新行
+                  const createdAt = new Date().toISOString();
+                  const name = (repoInfo.name || '').replace(/\t/g, ' ');
+                  const description = (repoInfo.description || '').replace(/\t/g, ' ');
+                  const language = (repoInfo.language || '').replace(/\t/g, ' ');
+                  const category = (repoInfo.category || '').replace(/\t/g, ' ');
+                  
+                  const newRow = `${repository}\t${createdAt}\t${name}\t${description}\t${language}\t${category}\t1\t1\t0\t0\t0\t0\t0\n`;
+                  tsvContent += newRow;
+                  
+                  // 保存 TSV 文件
+                  await createOrUpdateFile(
+                    claOctokit,
+                    'DIPCNPO',
+                    'creations',
+                    'creations.tsv',
+                    tsvContent,
+                    `Add project ${repository} to creations.tsv\n\n- Repository: ${repository}\n- Name: ${name}\n- Issue: #${issueNumber}`,
+                    tsvSha
+                  );
+                  console.log('✅ creations.tsv updated');
+
+                  // 压缩为 creations.zip
+                  // 将 TSV 内容写入临时文件
+                  const tempTsvPath = '/tmp/creations.tsv';
+                  fs.writeFileSync(tempTsvPath, tsvContent, 'utf8');
+                  
+                  // 压缩
+                  const zipPath = '/tmp/creations.zip';
+                  if (fs.existsSync(zipPath)) {
+                    fs.unlinkSync(zipPath);
+                  }
+                  execSync(`zip -q ${zipPath} ${tempTsvPath}`, { stdio: 'inherit' });
+                  
+                  // 读取 zip 文件并上传
+                  const zipContent = fs.readFileSync(zipPath);
+                  const zipBase64 = zipContent.toString('base64');
+                  
+                  // 检查 zip 文件是否已存在
+                  const zipFile = await getFileContent(claOctokit, 'DIPCNPO', 'creations', 'creations.zip');
+                  
+                  await claOctokit.rest.repos.createOrUpdateFileContents({
+                    owner: 'DIPCNPO',
+                    repo: 'creations',
+                    path: 'creations.zip',
+                    message: 'Update voting data (compressed)',
+                    content: zipBase64,
+                    sha: zipFile.exists ? zipFile.sha : null,
+                    committer: {
+                      name: 'CLA Transfer Bot',
+                      email: 'cla-transfer@DIPCNPO.org'
+                    }
+                  });
+                  
+                  console.log('✅ creations.zip updated');
+                  
+                  // 清理临时文件
+                  fs.unlinkSync(tempTsvPath);
+                  fs.unlinkSync(zipPath);
+                }
+              }
+
+              // 3. 邀请根作者加入 DIPCNPO
+              if (isRootAuthor) {
+                console.log(`Inviting ${username} to join DIPCNPO...`);
+                try {
+                  // 获取用户信息
+                  const { data: userData } = await claOctokit.rest.users.getByUsername({
+                    username: username
+                  });
+                  
+                  console.log(`User data:`, {
+                    id: userData.id,
+                    login: userData.login,
+                    email: userData.email
+                  });
+                  
+                  // 构建邀请参数
+                  // GitHub API 要求只能使用 invitee_id 或 email 中的一个，不能同时使用
+                  const invitationParams = {
+                    org: 'DIPCNPO',
+                    role: 'direct_member'
+                  };
+                  
+                  // 优先使用 invitee_id（用户 ID）
+                  if (userData.id) {
+                    invitationParams.invitee_id = userData.id;
+                  } else if (userData.email) {
+                    // 如果没有 ID，使用 email
+                    invitationParams.email = userData.email;
+                  } else {
+                    throw new Error(`Cannot invite user: no ID or email available for ${username}`);
+                  }
+                  
+                  console.log(`Invitation params:`, invitationParams);
+                  
+                  // 发送邀请
+                  const invitationResult = await claOctokit.rest.orgs.createInvitation(invitationParams);
+                  
+                  console.log(`✅ Invitation sent to ${username}`, invitationResult.data);
+                } catch (error) {
+                  console.warn(`⚠️  Error details:`, {
+                    status: error.status,
+                    message: error.message,
+                    response: error.response?.data
+                  });
+                  
+                  if (error.status === 404) {
+                    console.warn(`   Organization DIPCNPO not found or token lacks permissions`);
+                  } else if (error.status === 422) {
+                    console.warn(`   User may already be a member or have a pending invitation`);
+                    // 422 错误可能意味着用户已经是成员或有待处理的邀请，这不算错误
+                  } else if (error.status === 403) {
+                    console.warn(`   Token lacks organization:write permission`);
+                  } else {
+                    console.warn(`   Please manually invite ${username} to DIPCNPO organization if needed`);
+                  }
+                }
+              }
+
+              // 关闭 issue
+              await githubOctokit.rest.issues.update({
+                owner: workflowRepoOwner,
+                repo: workflowRepoName,
+                issue_number: issueNumber,
+                state: 'closed'
+              });
+
+              console.log('✅ All processing complete');
+            } catch (error) {
+              console.error('❌ Error processing CLA submission:', error);
+              process.exit(1);
+            }
+          }
+
+          main();
+          EOF

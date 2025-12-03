@@ -371,6 +371,7 @@ body {
 	overflow: hidden;
 }
 
+
 /* 阅读页面固定顶部区域 */
 .dashboard .header {
 	position: sticky;
@@ -2429,6 +2430,9 @@ body {
 	min-height: 0;
 	gap: 0;
 	position: relative;
+	max-width: 800px;
+	margin: 0 auto;
+	width: 100%;
 }
 
 /* 阅读页面固定顶部工具条 */

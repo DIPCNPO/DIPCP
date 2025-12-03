@@ -489,6 +489,9 @@
 			"fileNotFound": "ファイルが見つかりません: "
 		}
 	},
+	"footer": {
+		"backLink": "ログインページに戻る"
+	},
 	"noticesPage": {
 		"refresh": "更新",
 		"requests": "申請リスト",

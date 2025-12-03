@@ -486,6 +486,9 @@
 			"fileNotFound": "文件不存在: "
 		}
 	},
+	"footer": {
+		"backLink": "返回登录页面"
+	},
 	"noticesPage": {
 		"refresh": "刷新",
 		"requests": "申请列表",

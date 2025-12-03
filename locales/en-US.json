@@ -448,6 +448,9 @@
 			"fileNotFound": "File not found: "
 		}
 	},
+	"footer": {
+		"backLink": "Back to Login Page"
+	},
 	"noticesPage": {
 		"refresh": "Refresh",
 		"requests": "Requests",

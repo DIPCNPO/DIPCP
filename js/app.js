@@ -266,8 +266,17 @@ class DIPCPApp {
 		const hasUser = this.user;
 		const hasRepository = hasUser && this.setting.current_repo !== '';
 
-		// 如果未登录用户，重定向到登录页面
+		// 允许未登录用户访问的公开页面
+		const publicRoutes = ['/terms', '/privacy'];
+		const isPublicRoute = publicRoutes.includes(relativePath);
+
+		// 如果未登录用户，重定向到登录页面（但允许访问公开页面）
 		if (!hasUser) {
+			// 如果是公开页面，允许访问
+			if (isPublicRoute) {
+				await this.renderPage(route, fullPath);
+				return;
+			}
 			// 如果当前路径不是根路径，直接更新URL并渲染登录页，避免循环调用
 			if (relativePath !== '/' && relativePath !== '') {
 				const loginFullPath = this.getFullPath('/');

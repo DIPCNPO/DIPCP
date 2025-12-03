@@ -64,7 +64,7 @@ class TermsPage extends BasePage {
 	 */
 	async loadContent() {
 		try {
-			this.setState({ loading: true });
+			this.state.loading = true;
 
 			// 获取当前语言
 			const language = window.I18nService ? window.I18nService.getCurrentLanguage().split('-')[0] : 'zh';
@@ -84,15 +84,14 @@ class TermsPage extends BasePage {
 			// 将Markdown转换为HTML（使用简单的转换）
 			const html = this.markdownToHtml(markdown);
 
-			this.setState({ content: html, loading: false });
+			this.state.content = html;
+			this.state.loading = false;
 			this.rerender();
 		} catch (error) {
 			console.error('Failed to load terms content:', error);
 			// 加载失败时显示错误信息
-			this.setState({
-				content: `<div class="error">加载内容失败: ${error.message}</div>`,
-				loading: false
-			});
+			this.state.content = `<div class="error">加载内容失败: ${error.message}</div>`;
+			this.state.loading = false;
 			this.rerender();
 		}
 	}
@@ -122,12 +121,11 @@ class TermsPage extends BasePage {
 
 	renderFooter() {
 		// 从i18n读取页脚文字
-		const copyright = this.t('footer.copyright', '© 2025 DIPCF. 保留所有权利。');
 		const backLink = this.t('footer.backLink', '返回登录页面');
 
 		return `
 			<div class="legal-footer">
-				<p>${copyright}</p>
+				<p>© 2025 DIPCNPO. All rights reserved.</p>
 				<a href="#" class="back-link">${backLink}</a>
 			</div>
 		`;

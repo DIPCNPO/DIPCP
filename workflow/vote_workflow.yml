@@ -2,9 +2,9 @@ name: Vote Workflow
 
 on:
   schedule:
-    # 每分钟触发一次（测试用，正式环境应改为每小时：'0 * * * *'）
+    # 每小时触发一次
     # 注意：GitHub Actions 使用 UTC 时间，且调度时间可能不精确（通常在指定时间的几分钟内）
-    - cron: '* * * * *'
+    - cron: '0 * * * *'
   workflow_dispatch: # 允许手动触发
 
 jobs:

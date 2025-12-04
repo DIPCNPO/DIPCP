@@ -900,7 +900,7 @@ body {
 	box-shadow: 0 10px 30px var(--shadow-strong);
 	padding: 40px;
 	width: 100%;
-	max-width: 500px;
+	max-width: 800px;
 	margin: 0 auto;
 	text-align: center;
 	transition: background 0.3s ease, box-shadow 0.3s ease;

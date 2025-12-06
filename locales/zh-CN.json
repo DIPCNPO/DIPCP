@@ -327,7 +327,12 @@
 			"createdAt": "创建时间",
 			"select": "选择",
 			"noDescription": "无描述",
-			"searchPlaceholder": "根据作者或简介搜索..."
+			"searchPlaceholder": "根据作者或简介搜索...",
+			"languageFilter": "语言",
+			"categoryFilter": "类别",
+			"allLanguages": "全部语言",
+			"allCategories": "全部类别",
+			"noResults": "没有找到匹配的仓库"
 		},
 		"history": {
 			"title": "最近阅读的作品",

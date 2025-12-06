@@ -374,7 +374,12 @@
 			"createdAt": "作成日時",
 			"select": "選択",
 			"noDescription": "説明なし",
-			"searchPlaceholder": "作者または説明で検索..."
+			"searchPlaceholder": "作者または説明で検索...",
+			"languageFilter": "言語",
+			"categoryFilter": "カテゴリ",
+			"allLanguages": "すべての言語",
+			"allCategories": "すべてのカテゴリ",
+			"noResults": "一致するリポジトリが見つかりません"
 		},
 		"history": {
 			"title": "最近アクセスした作品",

@@ -285,6 +285,35 @@ ${this.t('cla.signingStatement', '我确认已阅读并同意上述贡献者许�
 	}
 
 	/**
+	 * 添加到作品列表
+	 * @async
+	 * @param {Object} repoInfo - 仓库信息
+	 */
+	async _addToList(repoInfo) {
+		try {
+			// 创建添加到作品列表Issue内容
+			const issueTitle = `AddtoList - ${window.app.user.username}`;
+			const issueBody = `**repository:** ${repoInfo ? JSON.stringify(repoInfo) : ''}`;
+
+			// 使用GitHub API创建添加到作品列表Issue
+			await window.GitHubService.createIssue(
+				'DIPCNPO',
+				'creations',
+				{
+					title: issueTitle,
+					body: issueBody
+				}
+			);
+
+			console.log('✅ [addToList] 添加到作品列表完成');
+
+		} catch (error) {
+			console.error('❌ [addToList] 添加到作品列表失败:', error);
+			throw new Error(`添加到作品列表失败: ${error.message}`);
+		}
+	}
+
+	/**
 	 * 获取文件的SHA值（用于更新文件）
 	 * @async
 	 * @param {string} owner - 仓库所有者

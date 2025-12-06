@@ -16,7 +16,7 @@ class CreationsPage extends BasePage {
 				repositoryUrl: 'https://github.com/ZelaCreator/zela_planet',
 				name: '',
 				repo: '',
-				penName: '',
+				penName: window.app.user.pen_name || '',
 				language: window.app.setting.language,
 				category: '',
 				description: ''
@@ -27,6 +27,8 @@ class CreationsPage extends BasePage {
 			creationsList: [], // 从 creations.tsv 获取的全部作品列表
 			filteredCreationsList: [], // 过滤后的作品列表
 			searchQuery: '', // 搜索关键词
+			selectedLanguage: '', // 选中的语言筛选（将在加载作品列表后根据当前设定自动设置）
+			selectedCategory: '', // 选中的类别筛选
 			creationsLoading: false, // 是否正在加载作品列表
 			creationsError: null, // 加载错误信息
 			currentLoadingItem: null, // 当前正在加载的作品项元素
@@ -178,8 +180,16 @@ class CreationsPage extends BasePage {
 
 		this.state.creationsList = creationsList;
 
-		// TODO:更新过滤列表
-		this.state.filteredCreationsList = creationsList;
+		// 如果还没有设置语言筛选（初始状态），且当前设定中的语言在可用语言列表中，则默认选中当前语言
+		if (!this.state.selectedLanguage && window.app.setting.language) {
+			const availableLanguages = this.getAvailableLanguages();
+			if (availableLanguages.includes(window.app.setting.language)) {
+				this.state.selectedLanguage = window.app.setting.language;
+			}
+		}
+
+		// 应用筛选（包括默认的语言筛选）
+		this.filterCreationsList(null, null, null);
 		this.state.creationsLoading = false;
 		this.state.creationsError = null;
 
@@ -320,7 +330,11 @@ class CreationsPage extends BasePage {
             `;
 		}
 
-		// 显示搜索框
+		// 获取可用的语言和类别
+		const availableLanguages = this.getAvailableLanguages();
+		const availableCategories = this.getAvailableCategories();
+
+		// 显示搜索框和筛选器
 		const searchInput = `
             <div class="search-container">
                 <input type="text" id="projects-search-input" class="search-input" 
@@ -330,15 +344,59 @@ class CreationsPage extends BasePage {
             </div>
         `;
 
+		// 语言筛选器
+		const languageOptions = availableLanguages.map(lang => {
+			const selected = this.state.selectedLanguage === lang ? 'selected' : '';
+			const displayName = window.I18nService.getLanguageDisplayName(lang) || lang;
+			return `<option value="${this.escapeHtmlAttribute(lang)}" ${selected}>${this.escapeHtml(displayName)}</option>`;
+		}).join('');
+		const languageFilter = `
+            <div class="filter-container">
+                <label for="language-filter" class="filter-label">${this.t('repositorySelection.existing.languageFilter', '语言')}:</label>
+                <select id="language-filter" class="filter-select">
+                    <option value="">${this.t('repositorySelection.existing.allLanguages', '全部语言')}</option>
+                    ${languageOptions}
+                </select>
+            </div>
+        `;
+
+		// 类别筛选器
+		const categoryOptions = availableCategories.map(cat => {
+			const selected = this.state.selectedCategory === cat ? 'selected' : '';
+			return `<option value="${this.escapeHtmlAttribute(cat)}" ${selected}>${this.escapeHtml(cat)}</option>`;
+		}).join('');
+		const categoryFilter = `
+            <div class="filter-container">
+                <label for="category-filter" class="filter-label">${this.t('repositorySelection.existing.categoryFilter', '类别')}:</label>
+                <select id="category-filter" class="filter-select">
+                    <option value="">${this.t('repositorySelection.existing.allCategories', '全部类别')}</option>
+                    ${categoryOptions}
+                </select>
+            </div>
+        `;
+
+		const filtersContainer = `
+            <div class="filters-wrapper">
+                ${languageFilter}
+                ${categoryFilter}
+            </div>
+        `;
+
 		// 使用过滤后的列表
 		const displayList = this.state.filteredCreationsList || this.state.creationsList;
 
 		if (displayList.length === 0) {
 			return `
                 <div class="repository-history">
-                    <h3>${this.t('repositorySelection.title', '作品列表')}</h3>
+                    <div class="repository-history-header">
+                        <h3>${this.t('repositorySelection.title', '作品列表')}</h3>
+                        <button class="refresh-btn" id="refresh-projects-btn" title="${this.tAttr('common.refresh', '刷新')}">
+                            <span class="refresh-icon">🔄</span>
+                        </button>
+                    </div>
                     ${searchInput}
-                    <p class="no-history">${this.state.searchQuery ? this.t('repositorySelection.existing.noResults', '没有找到匹配的仓库') : this.t('repositorySelection.existing.empty', '暂无可用仓库')}</p>
+                    ${filtersContainer}
+                    <p class="no-history">${this.state.searchQuery || this.state.selectedLanguage || this.state.selectedCategory ? this.t('repositorySelection.existing.noResults', '没有找到匹配的仓库') : this.t('repositorySelection.existing.empty', '暂无可用仓库')}</p>
                 </div>
             `;
 		}
@@ -362,6 +420,7 @@ class CreationsPage extends BasePage {
                     </button>
                 </div>
                 ${searchInput}
+                ${filtersContainer}
                 <div class="history-list">
                     ${creationItems}
                 </div>
@@ -370,30 +429,88 @@ class CreationsPage extends BasePage {
 	}
 
 	/**
-	 * 过滤作品列表（根据作者或简介）
-	 * @param {string} query - 搜索关键词
+	 * 过滤作品列表（根据搜索关键词、语言和类别）
+	 * @param {string} query - 搜索关键词（可选）
+	 * @param {string} language - 语言筛选（可选）
+	 * @param {string} category - 类别筛选（可选）
 	 */
-	filterCreationsList(query) {
-		const searchQuery = query.toLowerCase().trim();
-		this.state.searchQuery = searchQuery;
+	filterCreationsList(query = null, language = null, category = null) {
+		// 更新筛选条件
+		if (query !== null) {
+			this.state.searchQuery = query.toLowerCase().trim();
+		}
+		if (language !== null) {
+			this.state.selectedLanguage = language;
+		}
+		if (category !== null) {
+			this.state.selectedCategory = category;
+		}
 
-		if (!searchQuery) {
+		const searchQuery = this.state.searchQuery;
+		const selectedLanguage = this.state.selectedLanguage;
+		const selectedCategory = this.state.selectedCategory;
+
+		// 如果所有筛选条件都为空，显示全部
+		if (!searchQuery && !selectedLanguage && !selectedCategory) {
 			this.state.filteredCreationsList = this.state.creationsList;
 			return;
 		}
 
 		const filtered = this.state.creationsList.filter(creation => {
-			// 搜索作者（owner）
-			const ownerMatch = creation.owner.toLowerCase().includes(searchQuery);
-			// 搜索仓库名（repo）
-			const repoMatch = creation.repo.toLowerCase().includes(searchQuery);
-			// 搜索简介（description）
-			const descMatch = creation.description && creation.description.toLowerCase().includes(searchQuery);
+			// 搜索关键词筛选
+			let matchesSearch = true;
+			if (searchQuery) {
+				// 解析 repository 获取 owner
+				const parts = creation.repository ? creation.repository.split('/') : [];
+				const owner = parts.length > 0 ? parts[0] : '';
+				const repo = parts.length > 1 ? parts[1] : '';
 
-			return ownerMatch || repoMatch || descMatch;
+				const ownerMatch = owner.toLowerCase().includes(searchQuery);
+				const repoMatch = repo.toLowerCase().includes(searchQuery);
+				const descMatch = creation.description && creation.description.toLowerCase().includes(searchQuery);
+				const nameMatch = creation.name && creation.name.toLowerCase().includes(searchQuery);
+
+				matchesSearch = ownerMatch || repoMatch || descMatch || nameMatch;
+			}
+
+			// 语言筛选
+			const matchesLanguage = !selectedLanguage || creation.language === selectedLanguage;
+
+			// 类别筛选
+			const matchesCategory = !selectedCategory || creation.category === selectedCategory;
+
+			return matchesSearch && matchesLanguage && matchesCategory;
 		});
 
 		this.state.filteredCreationsList = filtered;
+	}
+
+	/**
+	 * 获取所有唯一的语言列表
+	 * @returns {string[]} 语言列表
+	 */
+	getAvailableLanguages() {
+		const languages = new Set();
+		this.state.creationsList.forEach(creation => {
+			if (creation.language) {
+				languages.add(creation.language);
+			}
+		});
+		return Array.from(languages).sort();
+	}
+
+	/**
+	 * 获取所有唯一的类别列表
+	 * @returns {string[]} 类别列表
+	 */
+	getAvailableCategories() {
+		const categories = new Set();
+		this.state.creationsList.forEach(creation => {
+			if (creation.category) {
+				categories.add(creation.category);
+			}
+		});
+		return Array.from(categories).sort();
 	}
 
 	/**
@@ -547,87 +664,8 @@ class CreationsPage extends BasePage {
 			});
 		});
 
-		// 历史记录和项目列表选择（整个区域可点击）
-		const historyItems = this.element.querySelectorAll('.history-item.clickable');
-		historyItems.forEach(item => {
-			item.addEventListener('click', async (e) => {
-				// 如果正在加载，阻止重复点击
-				if (this.state.loading) {
-					return;
-				}
-
-				// 检查元素是否已被禁用
-				if (item.style.pointerEvents === 'none') {
-					return;
-				}
-
-				const repository = item.dataset.repository; // 项目列表中的项有 data-repository 属性
-
-				// 构建仓库URL
-				const repositoryUrl = `https://github.com/${repository}`;
-
-				// 设置仓库URL到表单数据
-				this.state.formData.repositoryUrl = repositoryUrl;
-
-				// 高亮选中的项
-				const allItems = this.element.querySelectorAll('.history-item');
-				allItems.forEach(i => {
-					i.classList.remove('selected');
-					if (i.dataset.repository === repository) {
-						i.classList.add('selected');
-					}
-				});
-
-				// 先改变点击项目的光标状态为等待
-				item.style.cursor = 'wait';
-				item.style.opacity = '1'; // 恢复点击项的不透明度，让它更突出
-
-				// 在当前项目项中显示加载状态
-				const loadingIndicator = document.createElement('span');
-				loadingIndicator.className = 'loading-indicator';
-				loadingIndicator.textContent = '⏳ ' + this.t('repositorySelection.continue.loading', '处理中...');
-				loadingIndicator.style.marginLeft = '10px';
-				loadingIndicator.style.color = 'var(--primary-color, #0366d6)';
-				loadingIndicator.style.fontWeight = 'bold';
-				const repoInfo = item.querySelector('.repo-info');
-				if (repoInfo) {
-					repoInfo.appendChild(loadingIndicator);
-				}
-
-				// 保存当前加载的项目项和指示器引用，以便在同步进度中更新
-				this.state.currentLoadingItem = item;
-				this.state.currentLoadingIndicator = loadingIndicator;
-
-				// 禁用所有可点击项，防止重复点击（但要排除当前点击的项目项，保持其可交互以显示等待光标）
-				const allClickableItems = this.element.querySelectorAll('.history-item.clickable');
-				allClickableItems.forEach(i => {
-					if (i !== item) {
-						i.style.pointerEvents = 'none';
-						i.style.cursor = 'not-allowed';
-						i.style.opacity = '0.6';
-					}
-				});
-
-				// 在整个文档或容器上设置等待光标，确保鼠标悬停时显示
-				const container = this.element.closest('.dashboard') || this.element;
-				if (container) {
-					container.style.cursor = 'wait';
-				}
-
-				// 禁用选项卡按钮
-				this.disableTabButtons(true);
-
-				// 直接打开项目详情页
-				try {
-					await this.handleExistingRepository();
-				} catch (error) {
-					console.error('打开作品失败:', error);
-					// 恢复选项卡按钮
-					this.disableTabButtons(false);
-				}
-				// 注意：如果成功，会导航到其他页面，所以不需要恢复状态
-			});
-		});
+		// 绑定历史记录项的事件
+		this.bindHistoryItemEvents();
 
 		// 重试加载 creations.tsv 按钮
 		const retryBtn = this.element.querySelector('#retry-load-projects');
@@ -654,10 +692,30 @@ class CreationsPage extends BasePage {
 		// 搜索输入框
 		const searchInput = this.element.querySelector('#projects-search-input');
 		if (searchInput) {
+			let isComposing = false;
+
+			// 检测中文输入开始
+			searchInput.addEventListener('compositionstart', () => {
+				isComposing = true;
+			});
+
+			// 检测中文输入结束
+			searchInput.addEventListener('compositionend', (e) => {
+				isComposing = false;
+				// 中文输入完成后，立即更新筛选
+				this.filterCreationsList(e.target.value, null, null);
+				this.updateCreationsListOnly();
+			});
+
 			searchInput.addEventListener('input', (e) => {
-				this.filterCreationsList(e.target.value);
-				// 更新内容以重新渲染列表
-				this.updateContent();
+				this.filterCreationsList(e.target.value, null, null);
+				// 如果正在输入中文，不更新；否则立即更新
+				if (isComposing) {
+					// 中文输入过程中，不更新内容（等待 compositionend 事件）
+					return;
+				}
+				// 只更新列表部分，不重新渲染整个内容区域
+				this.updateCreationsListOnly();
 			});
 		}
 
@@ -665,7 +723,25 @@ class CreationsPage extends BasePage {
 		const clearSearchBtn = this.element.querySelector('#clear-search-btn');
 		if (clearSearchBtn) {
 			clearSearchBtn.addEventListener('click', () => {
-				this.filterCreationsList('');
+				this.filterCreationsList('', null, null);
+				this.updateContent();
+			});
+		}
+
+		// 语言筛选器
+		const languageFilter = this.element.querySelector('#language-filter');
+		if (languageFilter) {
+			languageFilter.addEventListener('change', (e) => {
+				this.filterCreationsList(null, e.target.value, null);
+				this.updateContent();
+			});
+		}
+
+		// 类别筛选器
+		const categoryFilter = this.element.querySelector('#category-filter');
+		if (categoryFilter) {
+			categoryFilter.addEventListener('change', (e) => {
+				this.filterCreationsList(null, null, e.target.value);
 				this.updateContent();
 			});
 		}
@@ -752,6 +828,127 @@ class CreationsPage extends BasePage {
 			// 内容更新后也同步一次tab按钮的active状态
 			this.updateTabsActiveState();
 		}
+	}
+
+	/**
+	 * 只更新作品列表部分，不重新渲染整个内容区域（用于搜索时保持输入框焦点）
+	 */
+	updateCreationsListOnly() {
+		const historyList = this.element.querySelector('.history-list');
+		if (historyList) {
+			// 获取可用的语言和类别
+			const availableLanguages = this.getAvailableLanguages();
+			const availableCategories = this.getAvailableCategories();
+
+			// 使用过滤后的列表
+			const displayList = this.state.filteredCreationsList || this.state.creationsList;
+
+			if (displayList.length === 0) {
+				const noHistoryMsg = this.state.searchQuery || this.state.selectedLanguage || this.state.selectedCategory
+					? this.t('repositorySelection.existing.noResults', '没有找到匹配的仓库')
+					: this.t('repositorySelection.existing.empty', '暂无可用仓库');
+				historyList.innerHTML = `<p class="no-history">${this.escapeHtml(noHistoryMsg)}</p>`;
+			} else {
+				const creationItems = displayList.map((creation) => `
+					<div class="history-item clickable" data-repository="${this.escapeHtmlAttribute(creation.repository)}">
+						<div class="repo-info">
+							<h4>${this.escapeHtml(creation.name)} (${this.escapeHtml(creation.repository)})</h4>
+							<p class="repo-description">${this.escapeHtml(creation.description || this.t('repositorySelection.existing.noDescription', '无描述'))}</p>
+							${creation.createdAt ? `<p class="last-accessed">${this.t('repositorySelection.existing.createdAt', '创建时间')}: ${this.escapeHtml(window.I18nService.formatDate(creation.createdAt))}</p>` : ''}
+						</div>
+					</div>
+				`).join('');
+				historyList.innerHTML = creationItems;
+
+				// 重新绑定列表项的事件
+				this.bindHistoryItemEvents();
+			}
+		}
+	}
+
+	/**
+	 * 绑定历史记录项的事件（从 bindEvents 中提取出来，便于复用）
+	 */
+	bindHistoryItemEvents() {
+		const historyItems = this.element.querySelectorAll('.history-item.clickable');
+		historyItems.forEach(item => {
+			item.addEventListener('click', async (e) => {
+				// 如果正在加载，阻止重复点击
+				if (this.state.loading) {
+					return;
+				}
+
+				// 检查元素是否已被禁用
+				if (item.style.pointerEvents === 'none') {
+					return;
+				}
+
+				const repository = item.dataset.repository;
+
+				// 构建仓库URL
+				const repositoryUrl = `https://github.com/${repository}`;
+
+				// 设置仓库URL到表单数据
+				this.state.formData.repositoryUrl = repositoryUrl;
+
+				// 高亮选中的项
+				const allItems = this.element.querySelectorAll('.history-item');
+				allItems.forEach(i => {
+					i.classList.remove('selected');
+					if (i.dataset.repository === repository) {
+						i.classList.add('selected');
+					}
+				});
+
+				// 先改变点击项目的光标状态为等待
+				item.style.cursor = 'wait';
+				item.style.opacity = '1';
+
+				// 在当前项目项中显示加载状态
+				const loadingIndicator = document.createElement('span');
+				loadingIndicator.className = 'loading-indicator';
+				loadingIndicator.textContent = '⏳ ' + this.t('repositorySelection.continue.loading', '处理中...');
+				loadingIndicator.style.marginLeft = '10px';
+				loadingIndicator.style.color = 'var(--primary-color, #0366d6)';
+				loadingIndicator.style.fontWeight = 'bold';
+				const repoInfo = item.querySelector('.repo-info');
+				if (repoInfo) {
+					repoInfo.appendChild(loadingIndicator);
+				}
+
+				// 保存当前加载的项目项和指示器引用
+				this.state.currentLoadingItem = item;
+				this.state.currentLoadingIndicator = loadingIndicator;
+
+				// 禁用所有可点击项
+				const allClickableItems = this.element.querySelectorAll('.history-item.clickable');
+				allClickableItems.forEach(i => {
+					if (i !== item) {
+						i.style.pointerEvents = 'none';
+						i.style.cursor = 'not-allowed';
+						i.style.opacity = '0.6';
+					}
+				});
+
+				// 在整个文档或容器上设置等待光标
+				const container = this.element.closest('.dashboard') || this.element;
+				if (container) {
+					container.style.cursor = 'wait';
+				}
+
+				// 禁用选项卡按钮
+				this.disableTabButtons(true);
+
+				// 直接打开项目详情页
+				try {
+					await this.handleExistingRepository();
+				} catch (error) {
+					console.error('打开作品失败:', error);
+					// 恢复选项卡按钮
+					this.disableTabButtons(false);
+				}
+			});
+		});
 	}
 
 	/**
@@ -906,7 +1103,6 @@ class CreationsPage extends BasePage {
 		// 验证输入数据
 		this.validateInputData(category, name, penName, description, repo);
 
-		// 先显示CLA，同意后才创建仓库
 		// 构建临时的仓库信息对象用于CLA显示（此时仓库尚未创建）
 		const repoInfo = {
 			owner: window.app.user.username,
@@ -922,8 +1118,9 @@ class CreationsPage extends BasePage {
 		this.updateContinueButtonState('loading', this.t('common.processing', '处理中...'));
 		this.updateLoadingIndicator(this.t('common.processing', '处理中...'));
 
-		await this.showCLAAgreement(repoInfo, async () => {
-			// CLA签署成功后，现在才创建仓库
+		// 创建仓库的核心逻辑
+		const createRepositoryCore = async () => {
+			// 创建仓库
 			await this.createRepository(repoInfo, true); // 根仓库
 			// 创建一个Issue，用于投票
 			await window.GitHubService.createIssue(window.app.user.username, repo, {
@@ -934,12 +1131,22 @@ class CreationsPage extends BasePage {
 			await window.StorageService.saveKV('user', window.app.user);
 
 			await this.openReadingPage(repoInfo);
+		};
 
-		}, async () => {
-			// 拒绝签名
-			this.restoreCursorState();
-			this.updateContinueButtonState('default', this.t('repositorySelection.continue.button', '继续'));
-		});
+		// 如果已经签署过CLA，直接创建仓库，否则显示CLA模态框
+		if (window.app.user.CLA) {
+			// 已经签署过CLA，直接将仓库信息添加到用户作品列表中
+			await this._addToList(repoInfo);
+			// 直接创建仓库
+			await createRepositoryCore();
+		} else {
+			// 先显示CLA，同意后才创建仓库
+			await this.showCLAAgreement(repoInfo, createRepositoryCore, async () => {
+				// 拒绝签名
+				this.restoreCursorState();
+				this.updateContinueButtonState('default', this.t('repositorySelection.continue.button', '继续'));
+			});
+		}
 	}
 
 	/**

@@ -289,6 +289,11 @@
 
 	/* 边框色 - 暗黑主题 */
 	--border-color: #434343;
+
+	/* 暗黑主题下的背景色变量 */
+	--background-primary: var(--bg-primary);
+	--background-secondary: var(--bg-secondary);
+	--background-tertiary: var(--bg-tertiary);
 }
 
 /* 全局重置 */
@@ -796,6 +801,117 @@ body {
 .last-accessed {
 	font-size: 0.75rem;
 	color: var(--text-tertiary);
+}
+
+/* Search and Filter Styles for CreationsPage */
+.search-container {
+	position: relative;
+	margin-bottom: 1rem;
+	display: flex;
+	align-items: center;
+}
+
+.search-container .search-input {
+	flex: 1;
+	padding: 0.625rem 2.5rem 0.625rem 0.875rem;
+	border: 1px solid var(--border-color);
+	border-radius: var(--border-radius);
+	font-size: 0.875rem;
+	background: var(--background-secondary);
+	color: var(--text-primary);
+	transition: all 0.2s ease;
+}
+
+.search-container .search-input:focus {
+	outline: none;
+	border-color: var(--primary-500);
+	box-shadow: 0 0 0 3px var(--primary-100);
+}
+
+.search-container .search-input::placeholder {
+	color: var(--text-tertiary);
+}
+
+.clear-search-btn {
+	position: absolute;
+	right: 0.5rem;
+	top: 50%;
+	transform: translateY(-50%);
+	background: transparent;
+	border: none;
+	color: var(--text-tertiary);
+	cursor: pointer;
+	font-size: 1.25rem;
+	line-height: 1;
+	padding: 0.25rem 0.5rem;
+	border-radius: var(--border-radius-sm);
+	transition: all 0.2s ease;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 1.75rem;
+	height: 1.75rem;
+}
+
+.clear-search-btn:hover {
+	background: var(--background-tertiary);
+	color: var(--text-primary);
+}
+
+.filters-wrapper {
+	display: flex;
+	gap: 1rem;
+	margin-bottom: 1rem;
+	flex-wrap: wrap;
+	align-items: flex-end;
+}
+
+.filter-container {
+	display: flex;
+	flex-direction: column;
+	gap: 0.5rem;
+	flex: 1;
+	min-width: 150px;
+}
+
+.filter-label {
+	font-size: 0.875rem;
+	font-weight: 500;
+	color: var(--text-secondary);
+	margin: 0;
+}
+
+.filter-select {
+	padding: 0.625rem 0.875rem;
+	border: 1px solid var(--border-color);
+	border-radius: var(--border-radius);
+	font-size: 0.875rem;
+	background: var(--background-secondary);
+	color: var(--text-primary);
+	cursor: pointer;
+	transition: all 0.2s ease;
+	appearance: none;
+	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23666' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+	background-repeat: no-repeat;
+	background-position: right 0.75rem center;
+	background-size: 0.75rem;
+	padding-right: 2.5rem;
+}
+
+.filter-select:hover {
+	border-color: var(--primary-300);
+}
+
+.filter-select:focus {
+	outline: none;
+	border-color: var(--primary-500);
+	box-shadow: 0 0 0 3px var(--primary-100);
+}
+
+.filter-select option {
+	background: var(--background-secondary);
+	color: var(--text-primary);
+	padding: 0.5rem;
 }
 
 .select-repo-btn {
@@ -6103,6 +6219,20 @@ textarea.form-control {
 		margin: 0;
 		max-width: 100%;
 		border-radius: 0;
+	}
+
+	/* 筛选器在移动端的适配 */
+	.filters-wrapper {
+		flex-direction: column;
+		gap: 0.75rem;
+	}
+
+	.filter-container {
+		min-width: 100%;
+	}
+
+	.search-container {
+		margin-bottom: 0.75rem;
 	}
 
 	/* 标签页适配 */

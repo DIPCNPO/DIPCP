@@ -521,7 +521,12 @@
 			"createdAt": "Created at",
 			"select": "Select",
 			"noDescription": "No description",
-			"searchPlaceholder": "Search by author or description..."
+			"searchPlaceholder": "Search by author or description...",
+			"languageFilter": "Language",
+			"categoryFilter": "Category",
+			"allLanguages": "All Languages",
+			"allCategories": "All Categories",
+			"noResults": "No matching repositories found"
 		},
 		"history": {
 			"title": "Recently Visited Creations",

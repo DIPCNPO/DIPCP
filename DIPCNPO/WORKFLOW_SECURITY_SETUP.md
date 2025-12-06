@@ -11,6 +11,9 @@
 #### 创建 `.github/workflows/cla-workflow.yml` 文件：
 将cla-workflow.yml中的内容复制粘贴。
 
+#### 创建 `.github/workflows/add-workflow.yml` 文件：
+将add-workflow.yml中的内容复制粘贴。
+
 #### 创建 `.github/workflows/statistics_workflow.yml` 文件：
 将statistics_workflow.yml中的内容复制粘贴。
 

@@ -359,7 +359,7 @@
 		"syncInterval": "Sync Interval",
 		"minutes": "minutes",
 		"alwaysRefresh": "Always fetch latest articles from GitHub",
-		"showMessage": "Show Messages",
+		"showMessage": "Show Author Messages",
 		"enableThirdPartyAI": "Enable Third-Party AI Translation",
 		"aiProviders": "AI Providers",
 		"addProvider": "Add Provider",

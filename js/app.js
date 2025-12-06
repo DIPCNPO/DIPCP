@@ -172,6 +172,12 @@ class DIPCPApp {
 		await ThemeService.init();
 		document.documentElement.setAttribute('lang', window.I18nService.currentLanguage);
 
+		// 4.5. 应用字体大小设置
+		const fontSize = this.setting.font_size || 16;
+		document.documentElement.style.fontSize = `${fontSize}px`;
+		document.documentElement.style.setProperty('--font-size', `${fontSize}px`);
+		document.documentElement.style.setProperty('--font-size-base', `${fontSize}px`);
+
 		// 5. 获取用户数据
 		this.user = await window.StorageService.getKV('user');
 		if (this.user) window.GitHubService.init(this.user.token);

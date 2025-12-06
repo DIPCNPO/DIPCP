@@ -465,7 +465,11 @@ class SettingsPage extends BasePage {
 	 */
 	applyFontSize() {
 		const fontSize = window.app.setting.font_size || 16;
+		// 直接设置 html 元素的 font-size，这样所有使用 rem 单位的元素都会自动缩放
+		document.documentElement.style.fontSize = `${fontSize}px`;
+		// 同时更新 CSS 变量，以便其他地方使用
 		document.documentElement.style.setProperty('--font-size', `${fontSize}px`);
+		document.documentElement.style.setProperty('--font-size-base', `${fontSize}px`);
 	}
 
 	/**

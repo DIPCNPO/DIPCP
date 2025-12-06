@@ -286,7 +286,7 @@
 		"syncInterval": "同步时间",
 		"minutes": "分钟",
 		"alwaysRefresh": "总是从github获取最新文章",
-		"showMessage": "显示留言",
+		"showMessage": "显示作者留言",
 		"enableThirdPartyAI": "启用第三方AI翻译",
 		"aiProviders": "AI提供商",
 		"addProvider": "添加提供商",

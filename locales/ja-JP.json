@@ -300,7 +300,7 @@
 		"syncInterval": "同期間隔",
 		"minutes": "分",
 		"alwaysRefresh": "常にGitHubから最新の記事を取得",
-		"showMessage": "メッセージを表示",
+		"showMessage": "作者メッセージを表示",
 		"aiSection": "サードパーティAI設定",
 		"enableThirdPartyAI": "サードパーティAI翻訳を有効にする",
 		"aiProviders": "AIプロバイダー",

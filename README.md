@@ -36,7 +36,7 @@ However, the value of this platform goes far beyond this. It has successfully ex
 
 2. **Access Application**:
    ```
-   Open in browser: http://localhost:8000
+   Open in browser: http://localhost:8000/DIPCP/
    ```
 
 ### Development Notes

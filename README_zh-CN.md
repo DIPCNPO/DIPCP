@@ -36,7 +36,7 @@ DIPCP是由DIPCF基金会运营的，基于GitHub的去中心化IP协作平台�
 
 2. **访问应用**：
    ```
-   浏览器打开：http://localhost:8000
+   浏览器打开：http://localhost:8000/DIPCP/
    ```
 
 ### 开发说明

@@ -677,7 +677,8 @@ class DIPCPApp {
 
 			for (const creation of window.app.user.creations) {
 				const segments = creation.split('/');
-				const issues = await window.GitHubService.listIssues(segments[0], segments[1], {
+				// 只检查用户自己的仓库
+				const issues = await window.GitHubService.listIssues(window.app.user.username, segments[1], {
 					state: 'open',
 					sort: 'created',
 					direction: 'desc',

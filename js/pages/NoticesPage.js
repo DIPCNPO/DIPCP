@@ -171,6 +171,10 @@ class NoticesPage extends BasePage {
 		`;
 	}
 
+	/**
+	 * 渲染申请预览内容
+	 * @returns {string} 申请预览内容HTML字符串
+	 */
 	renderRequestPreviewContent() {
 		if (this.state.requestPreviewLoading) {
 			return `<div class="notice-preview notice-preview-loading">${this.t('noticesPage.loadingPreview', '正在加载预览...')}</div>`;
@@ -920,7 +924,6 @@ class NoticesPage extends BasePage {
 			}
 
 			const fullContent = this.buildFullContentFromPreview(previewData);
-			console.log('fullContent', fullContent);
 			const fileData = await window.StorageService.execute('files', 'get', previewData.linkToFile);
 			fileData.content = fullContent;
 			await window.StorageService.execute('files', 'put', fileData);

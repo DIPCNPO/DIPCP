@@ -604,5 +604,31 @@
 			"permissionDenied": "権限が不足しています。ファイルを送信できません",
 			"conflict": "2回の送信の間隔が短すぎます。1分以上待ってから再度お試しください。"
 		}
+	},
+	"navigation": {
+		"back": "戻る",
+		"view": "閲覧",
+		"notices": "通知",
+		"submit": "送信",
+		"links": "リンク",
+		"settings": "設定"
+	},
+	"linksPage": {
+		"noFiles": "送信済みのファイルがありません",
+		"requestLink": "リンク申請",
+		"fileName": "ファイル名",
+		"action": "操作",
+		"submitFirstMessage": "リンクを申請する前に、まずファイルを送信してください",
+		"noFilesMessage": "現在の作品には、他の作者のリンクがまだ確立されていない記事がありません",
+		"contentPreview": "コンテンツプレビュー",
+		"matchedWords": "一致",
+		"sameNameWords": "個の同名語",
+		"selectLinkFile": "リンクする記事を選択",
+		"selectLinkFileLabel": "現在の作品の他の作者の記事を選択してください：",
+		"issuesDisabledError": "対象リポジトリで Issues 機能が有効になっていません。リポジトリ所有者に連絡して Issues 機能を有効にしてください。",
+		"linkRequestSuccess": "リンク申請が送信されました",
+		"linkRequestFailed": "リンク申請の送信に失敗しました",
+		"linkRequestPermissionError": "リンク申請を作成できません：権限が不足しています。対象リポジトリで Issues 機能が有効になっており、アクセス権限があることを確認してください。",
+		"linkRequestNotFoundError": "リンク申請を作成できません：対象リポジトリが存在しないか、アクセスできません。"
 	}
 }

@@ -38,7 +38,7 @@ class Header extends Component {
 		// 获取基础路径
 		const basePath = window.app?.basePath || '/';
 
-		// 5个固定按钮：后退、阅读、通知、提交、设定
+		// 6个固定按钮：后退、阅读、通知、提交、链接、设定
 		const buttons = [
 			{
 				href: '/creations',
@@ -61,6 +61,11 @@ class Header extends Component {
 				key: 'navigation.submit',
 				icon: '✅',
 				showBadge: hasPendingFiles
+			},
+			{
+				href: '/links',
+				key: 'navigation.links',
+				icon: '🔗',
 			},
 			{
 				href: '/settings',

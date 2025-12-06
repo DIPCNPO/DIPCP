@@ -662,5 +662,31 @@
 			"permissionDenied": "Insufficient permissions, unable to submit files",
 			"conflict": "The interval between two submissions is too short. Please wait for 1 minute or more before trying again."
 		}
+	},
+	"navigation": {
+		"back": "Back",
+		"view": "View",
+		"notices": "Notices",
+		"submit": "Submit",
+		"links": "Links",
+		"settings": "Settings"
+	},
+	"linksPage": {
+		"noFiles": "No submitted files",
+		"requestLink": "Request Link",
+		"fileName": "File Name",
+		"action": "Action",
+		"submitFirstMessage": "Please submit the file first before requesting a link",
+		"noFilesMessage": "There are no articles from other authors in the current work that have not established links",
+		"contentPreview": "Content Preview",
+		"matchedWords": "Matched",
+		"sameNameWords": "same name word(s)",
+		"selectLinkFile": "Select Article to Link",
+		"selectLinkFileLabel": "Please select an article from other authors in the current work:",
+		"issuesDisabledError": "The Issues feature is not enabled for the target repository. Please contact the repository owner to enable the Issues feature.",
+		"linkRequestSuccess": "Link request sent",
+		"linkRequestFailed": "Failed to send link request",
+		"linkRequestPermissionError": "Unable to create link request: Insufficient permissions. Please ensure the target repository has Issues enabled and you have access permissions.",
+		"linkRequestNotFoundError": "Unable to create link request: Target repository does not exist or is not accessible."
 	}
 }

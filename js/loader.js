@@ -131,6 +131,7 @@ class DynamicLoader {
 				'js/pages/SubmitPage.js',
 				'js/pages/SettingsPage.js',
 				'js/pages/NoticesPage.js',
+				'js/pages/LinksPage.js',
 				'js/pages/TermsPage.js',
 				'js/pages/PrivacyPage.js',
 				'js/pages/CreationsPage.js'

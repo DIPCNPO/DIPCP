@@ -602,5 +602,31 @@
 			"permissionDenied": "权限不足，无法提交文件",
 			"conflict": "两次提交的间隔太短，请等1分钟以上再试。"
 		}
+	},
+	"navigation": {
+		"back": "返回",
+		"view": "阅读",
+		"notices": "通知",
+		"submit": "提交",
+		"links": "链接",
+		"settings": "设定"
+	},
+	"linksPage": {
+		"noFiles": "没有已提交的文件",
+		"requestLink": "申请链接",
+		"fileName": "文件名",
+		"action": "操作",
+		"submitFirstMessage": "请先提交文件后再申请链接",
+		"noFilesMessage": "当前作品中没有其他作者未建立链接的文章",
+		"contentPreview": "内容预览",
+		"matchedWords": "匹配到",
+		"sameNameWords": "个同名词语",
+		"selectLinkFile": "选择要链接的文章",
+		"selectLinkFileLabel": "请选择当前作品中其他作者的文章：",
+		"issuesDisabledError": "目标仓库的 Issues 功能未启用。请联系仓库所有者启用 Issues 功能。",
+		"linkRequestSuccess": "链接申请已发送",
+		"linkRequestFailed": "发送链接申请失败",
+		"linkRequestPermissionError": "无法创建链接申请：权限不足。请确保目标仓库已启用 Issues 功能，且您有访问权限。",
+		"linkRequestNotFoundError": "无法创建链接申请：目标仓库不存在或无法访问。"
 	}
 }

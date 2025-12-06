@@ -7041,3 +7041,209 @@ textarea.form-control {
 [data-theme="dark"] .dashboard .project-detail-main .submit-file-item:hover {
 	background: var(--bg-tertiary);
 }
+
+/* ========================================
+   Links Page 样式
+   ======================================== */
+
+/* 链接页面内容区域 */
+.dashboard .project-detail-main .links-content {
+	flex: 1;
+	overflow-y: auto;
+	overflow-x: hidden;
+	padding: 20px;
+	min-height: 0;
+}
+
+/* 加载和空状态 */
+.dashboard .project-detail-main .links-content .loading,
+.dashboard .project-detail-main .links-content .empty {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 60px 20px;
+	color: var(--text-secondary);
+	font-size: 16px;
+	text-align: center;
+}
+
+/* 文件列表容器 */
+.dashboard .project-detail-main .links-file-list {
+	background: var(--bg-primary);
+	border-radius: 8px;
+	border: 1px solid var(--border-color);
+	overflow: hidden;
+}
+
+/* 文件列表头部 */
+.dashboard .project-detail-main .links-file-header {
+	display: grid;
+	grid-template-columns: 24px 1fr auto;
+	gap: 12px;
+	align-items: center;
+	padding: 12px 16px;
+	background: var(--bg-secondary);
+	border-bottom: 1px solid var(--border-color);
+	font-weight: 600;
+	font-size: 14px;
+	color: var(--text-secondary);
+}
+
+.dashboard .project-detail-main .links-file-header-icon {
+	width: 24px;
+	height: 24px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.dashboard .project-detail-main .links-file-header-name {
+	color: var(--text-primary);
+	min-width: 0;
+	width: 100%;
+	overflow: visible;
+}
+
+.dashboard .project-detail-main .links-file-header-action {
+	color: var(--text-primary);
+	white-space: nowrap;
+	flex-shrink: 0;
+	min-width: 80px;
+	text-align: right;
+}
+
+/* 文件项 */
+.dashboard .project-detail-main .links-file-item {
+	display: grid;
+	grid-template-columns: 24px 1fr auto;
+	gap: 12px;
+	align-items: center;
+	padding: 12px 16px;
+	border-bottom: 1px solid var(--border-secondary);
+	transition: background-color 0.2s ease;
+	cursor: pointer;
+}
+
+.dashboard .project-detail-main .links-file-item:last-child {
+	border-bottom: none;
+}
+
+.dashboard .project-detail-main .links-file-item:hover {
+	background: var(--bg-secondary);
+}
+
+/* 文件图标 */
+.dashboard .project-detail-main .links-file-icon {
+	font-size: 20px;
+	line-height: 1;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 24px;
+	height: 24px;
+	flex-shrink: 0;
+}
+
+/* 文件名 */
+.dashboard .project-detail-main .links-file-name {
+	font-size: 14px;
+	font-weight: 500;
+	color: var(--text-primary);
+	word-break: break-word;
+	overflow-wrap: break-word;
+	min-width: 0;
+	width: 100%;
+	overflow: visible;
+	font-family: 'Courier New', monospace;
+}
+
+/* 操作按钮 */
+.dashboard .project-detail-main .links-file-action-btn {
+	/* 重置浏览器默认样式 */
+	appearance: none;
+	-webkit-appearance: none;
+	-moz-appearance: none;
+	background: var(--bg-primary) !important;
+	border: 1px solid var(--border-color) !important;
+	border-radius: 6px !important;
+	padding: 6px 12px !important;
+	font-size: 16px !important;
+	cursor: pointer !important;
+	transition: all 0.2s ease !important;
+	display: inline-flex !important;
+	align-items: center !important;
+	justify-content: center !important;
+	color: var(--text-primary) !important;
+	white-space: nowrap !important;
+	margin: 0 !important;
+	box-shadow: none !important;
+	outline: none !important;
+	min-width: 40px;
+	height: 32px;
+	flex-shrink: 0;
+}
+
+.dashboard .project-detail-main .links-file-action-btn:hover:not(:disabled) {
+	background: var(--bg-tertiary) !important;
+	border-color: var(--primary-400) !important;
+	transform: translateY(-1px);
+	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.dashboard .project-detail-main .links-file-action-btn:active:not(:disabled) {
+	transform: translateY(0);
+}
+
+.dashboard .project-detail-main .links-file-action-btn:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+.dashboard .project-detail-main .links-file-action-btn:focus {
+	outline: none;
+	border-color: var(--primary-500);
+	box-shadow: 0 0 0 2px var(--primary-100);
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+	.dashboard .project-detail-main .links-file-header,
+	.dashboard .project-detail-main .links-file-item {
+		grid-template-columns: 24px 1fr auto;
+		gap: 8px;
+		padding: 10px 12px;
+	}
+
+	.dashboard .project-detail-main .links-content {
+		padding: 16px;
+	}
+
+	.dashboard .project-detail-main .links-file-name {
+		font-size: 13px;
+	}
+
+	.dashboard .project-detail-main .links-file-action-btn {
+		padding: 6px 10px !important;
+		font-size: 14px !important;
+		min-width: 36px;
+		height: 28px;
+	}
+}
+
+/* 暗黑主题适配 */
+[data-theme="dark"] .dashboard .project-detail-main .links-file-list {
+	border-color: var(--border-primary);
+}
+
+[data-theme="dark"] .dashboard .project-detail-main .links-file-header {
+	background: var(--bg-tertiary);
+	border-bottom-color: var(--border-primary);
+}
+
+[data-theme="dark"] .dashboard .project-detail-main .links-file-item {
+	border-bottom-color: var(--border-primary);
+}
+
+[data-theme="dark"] .dashboard .project-detail-main .links-file-item:hover {
+	background: var(--bg-tertiary);
+}

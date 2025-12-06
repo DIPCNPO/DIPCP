@@ -212,6 +212,7 @@ class DIPCPApp {
 		this.routes.set('/editor', 'EditorPage');
 		this.routes.set('/submit', 'SubmitPage');
 		this.routes.set('/notices', 'NoticesPage');
+		this.routes.set('/links', 'LinksPage');
 		this.routes.set('/settings', 'SettingsPage');
 		this.routes.set('/terms', 'TermsPage');
 		this.routes.set('/privacy', 'PrivacyPage');

@@ -45,6 +45,7 @@
 		"remove": "Remove",
 		"actions": "Actions",
 		"preview": "Preview",
+		"index": "Start writing your story here.",
 		"processing": "Processing...",
 		"loadFailed": "Load Failed",
 		"rateLimitExceeded": "GitHub API rate limit exceeded, please retry after {{hours}} hours {{minutes}} minutes",

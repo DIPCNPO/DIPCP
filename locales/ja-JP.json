@@ -45,6 +45,7 @@
 		"remove": "削除",
 		"actions": "アクション",
 		"preview": "プレビュー",
+		"index": "ここから物語を書き始めてください。",
 		"processing": "処理中...",
 		"loadFailed": "読み込みに失敗しました",
 		"rateLimitExceeded": "GitHub APIレート制限に達しました。{{hours}}時間{{minutes}}分後に再試行してください",

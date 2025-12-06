@@ -960,7 +960,7 @@ class ViewPage extends BasePage {
 
 			return filtered;
 		}).filter(part => part.length > 0);
-		let returnPath = window.app.user.username + "/" + window.app.setting.current_repo.split('/')[1] + "/" + filteredParts.join('/');
+		let returnPath = window.app.user.username + "/" + window.app.setting.current_repo.split('/')[1] + "/story/" + filteredParts.join('/');
 		if (!returnPath.endsWith('.md')) {
 			returnPath += ".md";
 		}

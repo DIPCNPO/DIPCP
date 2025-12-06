@@ -405,17 +405,36 @@ window.StorageService = {
 						return null;
 					}
 
-					// 构建相对路径（去掉 owner/repo，保留 dirPath 和 filename）
-					const pathParts = [];
-					if (parsed.dirPath) {
-						pathParts.push(parsed.dirPath);
+					// 只保留 story 目录中的文件，过滤掉 dirPath 为空的文件
+					if (!parsed.dirPath || !parsed.dirPath.startsWith('story')) {
+						return null;
 					}
-					pathParts.push(parsed.fullFilename || parsed.filename);
-					const relativePath = pathParts.join('/');
+
+					// 构建相对路径（去掉 story/ 前缀，保留子目录结构）
+					// 如果 dirPath 是 'story'，则 relativePath 就是文件名
+					// 如果 dirPath 是 'story/subdir'，则 relativePath 是 'subdir/文件名'
+					let relativePath = '';
+					const filename = parsed.fullFilename || parsed.filename;
+					if (!filename) {
+						console.warn('文件缺少文件名:', file.path);
+						return null;
+					}
+
+					if (parsed.dirPath === 'story') {
+						// 文件直接在 story 目录下
+						relativePath = filename;
+					} else if (parsed.dirPath.startsWith('story/')) {
+						// 文件在 story 的子目录中
+						const subPath = parsed.dirPath.substring(6); // 去掉 'story/' 前缀（6个字符）
+						relativePath = subPath + '/' + filename;
+					} else {
+						// 不应该到达这里，但为了安全起见
+						return null;
+					}
 
 					return {
 						path: file.path,
-						name: parsed.fullFilename || parsed.filename,
+						name: filename,
 						relativePath: relativePath
 					};
 				})
@@ -425,10 +444,10 @@ window.StorageService = {
 			const tree = { type: 'directory', name: '', children: [] };
 
 			mdFiles.forEach(file => {
-				// relativePath 已经去掉了 owner/repo，现在直接使用
+				// relativePath 已经去掉了 story/ 前缀，现在直接使用
 				const parts = file.relativePath ? file.relativePath.split('/') : [];
 
-				// 如果 parts 为空或只有一个元素（文件名），说明文件在根目录
+				// 如果 parts 为空，跳过
 				if (parts.length === 0) {
 					return; // 跳过空路径
 				}

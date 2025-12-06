@@ -45,6 +45,7 @@
 		"remove": "移除",
 		"actions": "操作",
 		"preview": "预览",
+		"index": "请在这里开始编写你的故事。",
 		"processing": "处理中...",
 		"loadFailed": "加载失败",
 		"rateLimitExceeded": "GitHub API 速率限制中，请等待 {{hours}} 小时 {{minutes}} 分钟后重试",

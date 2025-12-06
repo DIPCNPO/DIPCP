@@ -422,12 +422,12 @@ ${this.t('cla.signingStatement', '我确认已阅读并同意上述贡献者许�
 		console.log('正在准备批量创建初始文件...');
 		const language = window.app.setting.language.split('-')[0];
 		const allFiles = [];
+		const createTime = new Date().toISOString();
 
 		if (isRoot) {
-			const createTime = new Date().toISOString();
 			allFiles.push({
 				path: 'README.md',
-				content: `pen_name:${repoInfo.penName}\nversion:1\nupdate_time:${createTime}\ncreate_time:${createTime}\n${repoInfo.description}`
+				content: repoInfo.description
 			});
 			// 根仓库才有投票工作流
 			const content = await this._loadFile('workflow/vote_workflow.yml');
@@ -442,6 +442,12 @@ ${this.t('cla.signingStatement', '我确认已阅读并同意上述贡献者许�
 				content: json
 			});
 		}
+
+		// 添加索引文件
+		allFiles.push({
+			path: `story/index.md`,
+			content: `pen_name:${repoInfo.penName}\nversion:1\nupdate_time:${createTime}\ncreate_time:${createTime}\n${this.t('common.index')}`
+		});
 
 		const files = [
 			`docs/ABOUT_${language}.md`,

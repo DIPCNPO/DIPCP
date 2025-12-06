@@ -13,7 +13,7 @@ class CreationsPage extends BasePage {
 		super(props);
 		this.state = {
 			formData: {
-				repositoryUrl: 'https://github.com/ZelaCreator/Zela-Planet',
+				repositoryUrl: 'https://github.com/ZelaCreator/zela_planet',
 				name: '',
 				repo: '',
 				penName: '',
@@ -983,40 +983,80 @@ class CreationsPage extends BasePage {
 	}
 
 	/**
-	 * 同步仓库根目录内容
+	 * 同步仓库story目录内容
 	 * @async
 	 * @param {string} owner - 仓库所有者
 	 * @param {string} repo - 仓库名称
 	 */
 	async syncRepositoryRoot(owner, repo) {
-		let rootContents = [];
+		let storyContents = [];
 		try {
-			rootContents = await window.GitHubService.safeCall(async (octokit) => {
+			// 获取 story 目录下的内容
+			storyContents = await window.GitHubService.safeCall(async (octokit) => {
 				const { data } = await octokit.rest.repos.getContent({
 					owner,
 					repo,
-					path: ''
+					path: 'story'
 				});
 				return Array.isArray(data) ? data : [];
 			});
 		} catch (error) {
-			console.warn('无法通过API获取目录内容:', error);
+			console.warn('无法通过API获取story目录内容:', error);
 		}
 
-		console.log(`🔵 开始同步 ${rootContents.length} 个根目录文件...`);
+		console.log(`🔵 开始同步 ${storyContents.length} 个story目录下的文件...`);
 
-		// 过滤出文件（排除目录和以.开头的文件/目录）
-		const files = rootContents.filter(file =>
-			file.type === 'file' &&
-			!file.name.startsWith('.') &&
-			file.name.endsWith('.md')
+		// 递归获取 story 目录及其子目录下的所有 .md 文件
+		const allFiles = [];
+		const processDirectory = async (path) => {
+			try {
+				const contents = await window.GitHubService.safeCall(async (octokit) => {
+					const { data } = await octokit.rest.repos.getContent({
+						owner,
+						repo,
+						path: path
+					});
+					return Array.isArray(data) ? data : [];
+				});
+
+				for (const item of contents) {
+					if (item.type === 'file' && item.name.endsWith('.md') && !item.name.startsWith('.')) {
+						allFiles.push(item);
+					} else if (item.type === 'dir' && !item.name.startsWith('.')) {
+						// 递归处理子目录
+						await processDirectory(item.path);
+					}
+				}
+			} catch (error) {
+				console.warn(`无法获取目录 ${path} 的内容:`, error);
+			}
+		};
+
+		// 先处理 story 目录下的直接文件
+		const directFiles = storyContents.filter(item =>
+			item.type === 'file' &&
+			!item.name.startsWith('.') &&
+			item.name.endsWith('.md')
 		);
+		allFiles.push(...directFiles);
 
-		console.log(`🔵 过滤后需要下载 ${files.length} 个文件...`);
+		// 处理 story 目录下的子目录
+		const subDirs = storyContents.filter(item => item.type === 'dir' && !item.name.startsWith('.'));
+		for (const subDir of subDirs) {
+			await processDirectory(subDir.path);
+		}
+
+		console.log(`🔵 过滤后需要下载 ${allFiles.length} 个文件...`);
 
 		// 批量下载文件（使用StorageService.downloadFiles，它会自动使用raw URL）
-		if (files.length > 0) {
-			await window.StorageService.downloadFiles(files.map(file => `${owner}/${repo}/${file.name}`));
+		// 将 GitHub API 返回的相对路径转换为标准路径格式：owner/repo/path
+		if (allFiles.length > 0) {
+			const standardPaths = allFiles.map(file => {
+				// file.path 是 GitHub API 返回的相对路径（如 'story/index.md'）
+				// 需要转换为标准路径格式：owner/repo/story/index.md
+				return `${owner}/${repo}/${file.path}`;
+			});
+			await window.StorageService.downloadFiles(standardPaths);
 		}
 	}
 
@@ -1056,7 +1096,7 @@ class CreationsPage extends BasePage {
 
 			// 更新当前仓库信息
 			window.app.setting.current_repo = repository;
-			window.app.setting.current_article = `${repository}/README.md`;
+			window.app.setting.current_article = `${repository}/story/index.md`;
 			await window.StorageService.saveKV('setting', window.app.setting);
 
 			// 如果自己是根作者，将作品添加到自己的作品列表中
